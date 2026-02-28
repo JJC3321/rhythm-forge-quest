@@ -163,6 +163,9 @@ function setupGeoDash(
   const PLAYER_SIZE = 32;
   const PLAYER_X = 120;
 
+  const MIN_OBSTACLE_GAP = 80;
+  const DEFAULT_SPAWN_X = W + 60;
+
   // ── Track management with map support ──
   const tracks: TrackInfoWithMap[] =
     config.tracks && config.tracks.length > 0 ? config.tracks : [defaultTrack() as TrackInfoWithMap];
@@ -379,19 +382,47 @@ function setupGeoDash(
   // ── Obstacle pool ──
   const obstacles: ex.Actor[] = [];
   let spawnAccumulator = 0;
-  let lastSpawnX = W + 100;
 
-  function spawnObstacle() {
+  function getRightmostObstacleRightEdge(): number {
+    let right = -Infinity;
+    for (const ob of obstacles) {
+      if (ob.isKilled()) continue;
+      const obRight = ob.pos.x + ob.width / 2;
+      if (obRight > right) right = obRight;
+    }
+    return right;
+  }
+
+  function obstacleBoundsOverlap(
+    cx: number,
+    cy: number,
+    w: number,
+    h: number,
+    exclude: ex.Actor | null
+  ): boolean {
+    const left = cx - w / 2;
+    const right = cx + w / 2;
+    const top = cy - h / 2;
+    const bottom = cy + h / 2;
+    for (const ob of obstacles) {
+      if (ob.isKilled() || ob === exclude) continue;
+      const oLeft = ob.pos.x - ob.width / 2;
+      const oRight = ob.pos.x + ob.width / 2;
+      const oTop = ob.pos.y - ob.height / 2;
+      const oBottom = ob.pos.y + ob.height / 2;
+      if (left < oRight && right > oLeft && top < oBottom && bottom > oTop) return true;
+    }
+    return false;
+  }
+
+  function spawnObstacle(): boolean {
     const cp = currentParams();
     const pattern = getCurrentPattern();
-    
-    // If we have a map pattern, use it to determine obstacle type
+
     if (pattern && mapBasedSpawning) {
-      spawnObstacleFromPattern(pattern, cp);
-      return;
+      return spawnObstacleFromPattern(pattern, cp);
     }
-    
-    // Fallback to random spawning
+
     const rand = Math.random();
     let totalChance = cp.spikeChance + cp.blockChance;
     let type: "spike" | "block" | "doubleSpike";
@@ -411,37 +442,69 @@ function setupGeoDash(
     const blockH = 30 + Math.random() * 40;
 
     let obs: ex.Actor;
+    let spawnX: number;
+    let spawnY: number;
+    let obsW: number;
+    let obsH: number;
+
+    const rightmostRight = getRightmostObstacleRightEdge();
 
     switch (type) {
       case "spike": {
+        obsW = spikeSize * 0.7;
+        obsH = spikeSize * 0.8;
+        spawnY = GROUND_Y - GROUND_H / 2 - spikeSize / 2;
+        spawnX =
+          rightmostRight === -Infinity
+            ? DEFAULT_SPAWN_X
+            : Math.max(DEFAULT_SPAWN_X, rightmostRight + MIN_OBSTACLE_GAP + obsW / 2);
+        if (obstacleBoundsOverlap(spawnX, spawnY, obsW, obsH, null)) return false;
         const gfx = renderSpike(cp.obstacleColor, cp.obstacleGlow, spikeSize);
         obs = new ex.Actor({
-          x: W + 60,
-          y: GROUND_Y - GROUND_H / 2 - spikeSize / 2,
-          width: spikeSize * 0.7,
-          height: spikeSize * 0.8,
+          x: spawnX,
+          y: spawnY,
+          width: obsW,
+          height: obsH,
           collisionType: ex.CollisionType.Passive,
         });
         obs.graphics.use(gfx);
         break;
       }
       case "doubleSpike": {
+        const spike2Offset = spikeSize * 0.6;
+        const w1 = spikeSize * 0.7;
+        const h1 = spikeSize * 0.8;
+        const w2 = spikeSize * 0.55;
+        const h2 = spikeSize * 0.65;
+        const totalRight = spike2Offset + w2 / 2;
+        spawnX =
+          rightmostRight === -Infinity
+            ? DEFAULT_SPAWN_X
+            : Math.max(DEFAULT_SPAWN_X, rightmostRight + MIN_OBSTACLE_GAP + totalRight);
+        const x1 = spawnX;
+        const y1 = GROUND_Y - GROUND_H / 2 - spikeSize / 2;
+        const x2 = spawnX + spike2Offset;
+        const y2 = GROUND_Y - GROUND_H / 2 - spikeSize * 0.4;
+        if (
+          obstacleBoundsOverlap(x1, y1, w1, h1, null) ||
+          obstacleBoundsOverlap(x2, y2, w2, h2, null)
+        )
+          return false;
         const gfx = renderSpike(cp.obstacleColor, cp.obstacleGlow, spikeSize);
         obs = new ex.Actor({
-          x: W + 60,
-          y: GROUND_Y - GROUND_H / 2 - spikeSize / 2,
-          width: spikeSize * 0.7,
-          height: spikeSize * 0.8,
+          x: x1,
+          y: y1,
+          width: w1,
+          height: h1,
           collisionType: ex.CollisionType.Passive,
         });
         obs.graphics.use(gfx);
-        // Second spike slightly offset
         const gfx2 = renderSpike(cp.obstacleColor, cp.obstacleGlow, spikeSize * 0.8);
         const spike2 = new ex.Actor({
-          x: W + 60 + spikeSize * 0.6,
-          y: GROUND_Y - GROUND_H / 2 - spikeSize * 0.4,
-          width: spikeSize * 0.55,
-          height: spikeSize * 0.65,
+          x: x2,
+          y: y2,
+          width: w2,
+          height: h2,
           collisionType: ex.CollisionType.Passive,
         });
         spike2.graphics.use(gfx2);
@@ -456,12 +519,20 @@ function setupGeoDash(
         break;
       }
       case "block": {
+        obsW = blockW;
+        obsH = blockH;
+        spawnY = GROUND_Y - GROUND_H / 2 - blockH / 2;
+        spawnX =
+          rightmostRight === -Infinity
+            ? DEFAULT_SPAWN_X
+            : Math.max(DEFAULT_SPAWN_X, rightmostRight + MIN_OBSTACLE_GAP + obsW / 2);
+        if (obstacleBoundsOverlap(spawnX, spawnY, obsW, obsH, null)) return false;
         const gfx = renderBlock(cp.obstacleColor, cp.obstacleGlow, blockW, blockH);
         obs = new ex.Actor({
-          x: W + 60,
-          y: GROUND_Y - GROUND_H / 2 - blockH / 2,
-          width: blockW,
-          height: blockH,
+          x: spawnX,
+          y: spawnY,
+          width: obsW,
+          height: obsH,
           collisionType: ex.CollisionType.Passive,
         });
         obs.graphics.use(gfx);
@@ -478,27 +549,40 @@ function setupGeoDash(
 
     scene.add(obs);
     obstacles.push(obs);
+    return true;
   }
 
-  function spawnObstacleFromPattern(pattern: MapPattern, cp: TrackParams) {
-    // Use pattern-specific colors if available
+  function spawnObstacleFromPattern(pattern: MapPattern, cp: TrackParams): boolean {
     const obstacleColor = currentMap?.visualTheme.obstacleColor || cp.obstacleColor;
     const obstacleGlow = currentMap?.visualTheme.obstacleGlow || cp.obstacleGlow;
-    
+    const rightmostRight = getRightmostObstacleRightEdge();
+
     let obs: ex.Actor;
 
     switch (pattern.type) {
       case "spikes": {
         const spikeCount = pattern.spikeCount || Math.round(3 + pattern.density * 5);
         const spikeSize = 30 + Math.random() * 10;
-        
+        const spikeW = spikeSize * 0.7;
+        const spikeH = spikeSize * 0.8;
+        const spacing = Math.max(pattern.spacing ?? 80, spikeW + MIN_OBSTACLE_GAP);
+        const firstX =
+          rightmostRight === -Infinity
+            ? DEFAULT_SPAWN_X
+            : Math.max(DEFAULT_SPAWN_X, rightmostRight + MIN_OBSTACLE_GAP + spikeW / 2);
+        const spikeY = GROUND_Y - GROUND_H / 2 - spikeSize / 2;
+
+        for (let i = 0; i < spikeCount; i++) {
+          const sx = firstX + i * spacing;
+          if (obstacleBoundsOverlap(sx, spikeY, spikeW, spikeH, null)) return false;
+        }
         for (let i = 0; i < spikeCount; i++) {
           const gfx = renderSpike(obstacleColor, obstacleGlow, spikeSize);
           const spike = new ex.Actor({
-            x: W + 60 + i * pattern.spacing,
-            y: GROUND_Y - GROUND_H / 2 - spikeSize / 2,
-            width: spikeSize * 0.7,
-            height: spikeSize * 0.8,
+            x: firstX + i * spacing,
+            y: spikeY,
+            width: spikeW,
+            height: spikeH,
             collisionType: ex.CollisionType.Passive,
           });
           spike.graphics.use(gfx);
@@ -511,15 +595,24 @@ function setupGeoDash(
           scene.add(spike);
           obstacles.push(spike);
         }
-        return;
+        return true;
       }
       case "blocks": {
         const blockWidth = pattern.blockWidth || 40;
         const blockHeight = 30 + Math.random() * 20;
+        const spawnX =
+          rightmostRight === -Infinity
+            ? DEFAULT_SPAWN_X
+            : Math.max(
+                DEFAULT_SPAWN_X,
+                rightmostRight + MIN_OBSTACLE_GAP + blockWidth / 2
+              );
+        const spawnY = GROUND_Y - GROUND_H / 2 - blockHeight / 2;
+        if (obstacleBoundsOverlap(spawnX, spawnY, blockWidth, blockHeight, null)) return false;
         const gfx = renderBlock(obstacleColor, obstacleGlow, blockWidth, blockHeight);
         obs = new ex.Actor({
-          x: W + 60,
-          y: GROUND_Y - GROUND_H / 2 - blockHeight / 2,
+          x: spawnX,
+          y: spawnY,
           width: blockWidth,
           height: blockHeight,
           collisionType: ex.CollisionType.Passive,
@@ -527,17 +620,29 @@ function setupGeoDash(
         obs.graphics.use(gfx);
         break;
       }
-      case "gaps": {
-        // Gaps are handled by not spawning obstacles for a duration
-        return;
-      }
+      case "gaps":
+        return true;
       case "collectibles": {
         const collectCount = pattern.collectibleCount || Math.round(5 + pattern.density * 5);
+        const colW = 16;
+        const colSpacing = Math.max(pattern.spacing ?? 80, colW + MIN_OBSTACLE_GAP);
+        const firstX =
+          rightmostRight === -Infinity
+            ? W + 80
+            : Math.max(W + 80, rightmostRight + MIN_OBSTACLE_GAP + colW / 2);
+        const collectYPositions: number[] = [];
+        for (let i = 0; i < collectCount; i++) {
+          collectYPositions.push(GROUND_Y - GROUND_H / 2 - 60 - Math.random() * 80);
+        }
+        for (let i = 0; i < collectCount; i++) {
+          const cx = firstX + i * colSpacing;
+          if (obstacleBoundsOverlap(cx, collectYPositions[i], colW, colW, null)) return false;
+        }
         for (let i = 0; i < collectCount; i++) {
           const collectGfx = renderSprite(assets.collectible, 16);
           const col = new ex.Actor({
-            x: W + 80 + i * pattern.spacing,
-            y: GROUND_Y - GROUND_H / 2 - 60 - Math.random() * 80,
+            x: firstX + i * colSpacing,
+            y: collectYPositions[i],
             width: 16,
             height: 16,
             collisionType: ex.CollisionType.Passive,
@@ -553,28 +658,44 @@ function setupGeoDash(
           scene.add(col);
           obstacles.push(col);
         }
-        return;
+        return true;
       }
       case "mixed": {
-        // Randomly choose between spikes and blocks
         if (Math.random() < 0.6) {
           const spikeSize = 30 + Math.random() * 10;
+          const spikeW = spikeSize * 0.7;
+          const spikeH = spikeSize * 0.8;
+          const spawnX =
+            rightmostRight === -Infinity
+              ? DEFAULT_SPAWN_X
+              : Math.max(DEFAULT_SPAWN_X, rightmostRight + MIN_OBSTACLE_GAP + spikeW / 2);
+          const spawnY = GROUND_Y - GROUND_H / 2 - spikeSize / 2;
+          if (obstacleBoundsOverlap(spawnX, spawnY, spikeW, spikeH, null)) return false;
           const gfx = renderSpike(obstacleColor, obstacleGlow, spikeSize);
           obs = new ex.Actor({
-            x: W + 60,
-            y: GROUND_Y - GROUND_H / 2 - spikeSize / 2,
-            width: spikeSize * 0.7,
-            height: spikeSize * 0.8,
+            x: spawnX,
+            y: spawnY,
+            width: spikeW,
+            height: spikeH,
             collisionType: ex.CollisionType.Passive,
           });
           obs.graphics.use(gfx);
         } else {
           const blockWidth = 30 + Math.random() * 20;
           const blockHeight = 30 + Math.random() * 40;
+          const spawnX =
+            rightmostRight === -Infinity
+              ? DEFAULT_SPAWN_X
+              : Math.max(
+                  DEFAULT_SPAWN_X,
+                  rightmostRight + MIN_OBSTACLE_GAP + blockWidth / 2
+                );
+          const spawnY = GROUND_Y - GROUND_H / 2 - blockHeight / 2;
+          if (obstacleBoundsOverlap(spawnX, spawnY, blockWidth, blockHeight, null)) return false;
           const gfx = renderBlock(obstacleColor, obstacleGlow, blockWidth, blockHeight);
           obs = new ex.Actor({
-            x: W + 60,
-            y: GROUND_Y - GROUND_H / 2 - blockHeight / 2,
+            x: spawnX,
+            y: spawnY,
             width: blockWidth,
             height: blockHeight,
             collisionType: ex.CollisionType.Passive,
@@ -584,14 +705,21 @@ function setupGeoDash(
         break;
       }
       default: {
-        // Fallback to spike
         const spikeSize = 30 + Math.random() * 10;
+        const spikeW = spikeSize * 0.7;
+        const spikeH = spikeSize * 0.8;
+        const spawnX =
+          rightmostRight === -Infinity
+            ? DEFAULT_SPAWN_X
+            : Math.max(DEFAULT_SPAWN_X, rightmostRight + MIN_OBSTACLE_GAP + spikeW / 2);
+        const spawnY = GROUND_Y - GROUND_H / 2 - spikeSize / 2;
+        if (obstacleBoundsOverlap(spawnX, spawnY, spikeW, spikeH, null)) return false;
         const gfx = renderSpike(obstacleColor, obstacleGlow, spikeSize);
         obs = new ex.Actor({
-          x: W + 60,
-          y: GROUND_Y - GROUND_H / 2 - spikeSize / 2,
-          width: spikeSize * 0.7,
-          height: spikeSize * 0.8,
+          x: spawnX,
+          y: spawnY,
+          width: spikeW,
+          height: spikeH,
           collisionType: ex.CollisionType.Passive,
         });
         obs.graphics.use(gfx);
@@ -607,6 +735,7 @@ function setupGeoDash(
 
     scene.add(obs);
     obstacles.push(obs);
+    return true;
   }
 
   function deathEffect() {
@@ -785,31 +914,22 @@ function setupGeoDash(
 
     // ── Spawn obstacles ──
     spawnAccumulator += dt;
-    
-    // Use map-based spawning if available, otherwise fall back to interval-based
+
     if (mapBasedSpawning && shouldSpawnFromPattern()) {
-      spawnObstacle();
-      spawnAccumulator = 0; // Reset accumulator when we spawn from pattern
+      if (spawnObstacle()) spawnAccumulator = 0;
     } else if (spawnAccumulator >= cp.spawnInterval) {
-      // Enforce minimum distance so the player can actually jump between obstacles
       const jumpDuration = 2 * Math.abs(cp.jumpForce) / cp.gravity;
       const jumpDistance = cp.scrollSpeed * jumpDuration;
-      const minGap = jumpDistance + PLAYER_SIZE * 3;
+      const minGap = Math.max(MIN_OBSTACLE_GAP, jumpDistance + PLAYER_SIZE * 3);
+      const rightmostRight = getRightmostObstacleRightEdge();
+      const maxNewHalfWidth = 35;
+      const canSpawn =
+        rightmostRight === -Infinity ||
+        DEFAULT_SPAWN_X - (rightmostRight + maxNewHalfWidth) >= minGap;
 
-      // Find the rightmost obstacle still on screen
-      let rightmostX = -Infinity;
-      for (const ob of obstacles) {
-        if (!ob.isKilled() && ob.pos.x > rightmostX) {
-          rightmostX = ob.pos.x;
-        }
-      }
-
-      const spawnX = W + 60;
-      if (rightmostX === -Infinity || spawnX - rightmostX >= minGap) {
+      if (canSpawn && spawnObstacle()) {
         spawnAccumulator -= cp.spawnInterval;
-        spawnObstacle();
       }
-      // If too close, don't reset accumulator — retry next frame
     }
 
     // ── Spawn collectibles (only if not using map-based spawning) ──
