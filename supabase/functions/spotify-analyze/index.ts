@@ -40,9 +40,9 @@ serve(async (req) => {
 
     const token = await getSpotifyToken();
 
-    // Fetch playlist info with track details
+    // Fetch playlist info
     const playlistRes = await fetch(
-      `https://api.spotify.com/v1/playlists/${playlistId}?fields=name,images,tracks.total,tracks.items(track(id,name,duration_ms,popularity))`,
+      `https://api.spotify.com/v1/playlists/${playlistId}`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
     if (!playlistRes.ok) {
@@ -52,8 +52,13 @@ serve(async (req) => {
     }
     const playlist = await playlistRes.json();
 
-    const tracks = playlist.tracks.items
-      .map((item: any) => item.track)
+    const trackItems = playlist?.tracks?.items || [];
+    const tracks = trackItems
+      .map((item: any) => item?.track)
+      .filter(Boolean)
+      .slice(0, 50);
+
+    if (tracks.length === 0) throw new Error("No tracks found in playlist");
       .filter(Boolean)
       .slice(0, 50);
 
