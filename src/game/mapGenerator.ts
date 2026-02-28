@@ -128,7 +128,7 @@ export class MapGenerator {
    */
   private generateFallbackMap(track: TrackInfoWithMap): SongMap {
     console.log(`Using pre-made fallback map for ${track.name}`);
-    return getPremadeMap(track.id);
+    return getPremadeMap(track.id, track.durationMs);
   }
 
   /**

@@ -184,6 +184,16 @@ function setupGeoDash(
   let mapBasedSpawning = false;
   let preloadStarted = false;
 
+  function clearObstacles() {
+    for (const ob of obstacles) {
+      if (!ob.isKilled()) ob.kill();
+    }
+    obstacles.length = 0;
+    jumpedObstacles.clear();
+    spawnAccumulator = 0;
+    collectibleAccum = 0;
+  }
+
   function switchToTrack(index: number) {
     if (index >= tracks.length) index = 0;
     currentTrackIndex = index;
@@ -193,7 +203,7 @@ function setupGeoDash(
     transitioning = true;
     transitionProgress = 0;
     
-    // Load map for new track (async with fallback)
+    clearObstacles();
     loadTrackMapWithFallback(track);
     
     if (callbacks.onSongChange) {
@@ -222,8 +232,7 @@ function setupGeoDash(
       return;
     }
 
-    // Load pre-made map instantly for immediate gameplay
-    const fallbackMap = getPremadeMap(track.id);
+    const fallbackMap = getPremadeMap(track.id, track.durationMs);
     currentMap = fallbackMap;
     currentPatternIndex = 0;
     patternProgress = 0;
@@ -251,34 +260,30 @@ function setupGeoDash(
     if (!currentMap || !mapBasedSpawning) return null;
     
     const patterns = currentMap.patterns;
-    if (currentPatternIndex >= patterns.length) return null;
+    if (patterns.length === 0) return null;
     
-    const currentPattern = patterns[currentPatternIndex];
-    const patternEndTime = currentPattern.startTime + currentPattern.duration;
+    const mapDuration = currentMap.totalDuration;
+    if (mapDuration <= 0) return null;
     
-    // Check if we should move to next pattern
-    if (trackElapsedMs >= patternEndTime) {
-      currentPatternIndex++;
-      patternProgress = 0;
-      if (currentPatternIndex >= patterns.length) {
-        return null; // No more patterns
+    const effectiveTime = trackElapsedMs % mapDuration;
+    
+    for (let i = 0; i < patterns.length; i++) {
+      const pattern = patterns[i];
+      const patternEnd = pattern.startTime + pattern.duration;
+      
+      if (effectiveTime >= pattern.startTime && effectiveTime < patternEnd) {
+        const globalIndex = Math.floor(trackElapsedMs / mapDuration) * patterns.length + i;
+        if (globalIndex !== currentPatternIndex) {
+          currentPatternIndex = globalIndex;
+          patternProgress = 0;
+        } else {
+          patternProgress = (effectiveTime - pattern.startTime) / pattern.duration;
+        }
+        return pattern;
       }
-      return getCurrentPattern(); // Recurse to get next pattern
     }
     
-    // Update pattern progress
-    patternProgress = (trackElapsedMs - currentPattern.startTime) / currentPattern.duration;
-    
-    return currentPattern;
-  }
-
-  function shouldSpawnFromPattern(): boolean {
-    const pattern = getCurrentPattern();
-    if (!pattern) return false;
-    
-    // Use pattern density to determine spawn probability
-    const spawnChance = pattern.density * 0.1; // Scale down to reasonable rate
-    return Math.random() < spawnChance;
+    return null;
   }
 
   function currentParams(): TrackParams {
@@ -915,9 +920,13 @@ function setupGeoDash(
     // ── Spawn obstacles ──
     spawnAccumulator += dt;
 
-    if (mapBasedSpawning && shouldSpawnFromPattern()) {
-      if (spawnObstacle()) spawnAccumulator = 0;
-    } else if (spawnAccumulator >= cp.spawnInterval) {
+    const activePattern = getCurrentPattern();
+    const patternDensityFactor = activePattern ? (1 - activePattern.density * 0.5) : 1;
+    const effectiveSpawnInterval = mapBasedSpawning && activePattern
+      ? Math.max(300, cp.spawnInterval * patternDensityFactor)
+      : cp.spawnInterval;
+
+    if (spawnAccumulator >= effectiveSpawnInterval) {
       const jumpDuration = 2 * Math.abs(cp.jumpForce) / cp.gravity;
       const jumpDistance = cp.scrollSpeed * jumpDuration;
       const minGap = Math.max(MIN_OBSTACLE_GAP, jumpDistance + PLAYER_SIZE * 3);
@@ -928,7 +937,7 @@ function setupGeoDash(
         DEFAULT_SPAWN_X - (rightmostRight + maxNewHalfWidth) >= minGap;
 
       if (canSpawn && spawnObstacle()) {
-        spawnAccumulator -= cp.spawnInterval;
+        spawnAccumulator -= effectiveSpawnInterval;
       }
     }
 

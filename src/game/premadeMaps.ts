@@ -386,38 +386,27 @@ const PREMADE_MAPS: SongMap[] = [
 
 /**
  * Get a pre-made map for instant fallback.
- * Maps are rotated to provide variety.
+ * Maps are rotated to provide variety and scaled to match the song duration.
  */
-export function getPremadeMap(trackId: string): SongMap {
-  // Use track ID to consistently select the same map for the same track
+export function getPremadeMap(trackId: string, songDurationMs?: number): SongMap {
   const hash = trackId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
   const index = hash % PREMADE_MAPS.length;
   
   const baseMap = PREMADE_MAPS[index];
-  
-  // Scale the map to match a typical song duration if needed
-  const targetDuration = 48000; // 48 seconds typical
+  const targetDuration = songDurationMs || baseMap.totalDuration;
   const timeScale = targetDuration / baseMap.totalDuration;
   
-  if (Math.abs(timeScale - 1) > 0.1) {
-    // Scale patterns if duration differs significantly
-    const scaledPatterns = baseMap.patterns.map(pattern => ({
-      ...pattern,
-      startTime: Math.round(pattern.startTime * timeScale),
-      duration: Math.round(pattern.duration * timeScale),
-    }));
-    
-    return {
-      ...baseMap,
-      trackId: `premade_${trackId}`,
-      patterns: scaledPatterns,
-      totalDuration: targetDuration,
-    };
-  }
+  const scaledPatterns = baseMap.patterns.map(pattern => ({
+    ...pattern,
+    startTime: Math.round(pattern.startTime * timeScale),
+    duration: Math.round(pattern.duration * timeScale),
+  }));
   
   return {
     ...baseMap,
     trackId: `premade_${trackId}`,
+    patterns: scaledPatterns,
+    totalDuration: targetDuration,
   };
 }
 
