@@ -44,4 +44,4 @@ export interface AppState {
   isGameOver: boolean;
 }
 
-export type LoadingStep = "spotify" | "gemini" | "engine";
+export type LoadingStep = "gemini" | "engine";

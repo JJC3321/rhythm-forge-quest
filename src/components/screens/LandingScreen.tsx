@@ -3,28 +3,45 @@ import { motion } from "framer-motion";
 import { Music, Sparkles, Gamepad2, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Slider } from "@/components/ui/slider";
+import { PlaylistMetrics } from "@/types/game";
 
 interface LandingScreenProps {
-  onGenerate: (url: string) => void;
+  onGenerate: (metrics: PlaylistMetrics) => void;
 }
 
 const steps = [
-  { icon: Music, label: "Analyze", desc: "We scan your playlist's vibe" },
+  { icon: Music, label: "Describe", desc: "Tell us about your playlist's vibe" },
   { icon: Sparkles, label: "AI Generate", desc: "Gemini designs a unique game" },
   { icon: Gamepad2, label: "Play", desc: "Jump into your custom world" },
 ];
 
 const LandingScreen = ({ onGenerate }: LandingScreenProps) => {
-  const [url, setUrl] = useState("");
+  const [name, setName] = useState("");
+  const [energy, setEnergy] = useState(0.5);
+  const [tempo, setTempo] = useState(120);
+  const [valence, setValence] = useState(0.5);
+  const [danceability, setDanceability] = useState(0.5);
+  const [acousticness, setAcousticness] = useState(0.3);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (url.trim()) onGenerate(url.trim());
+    if (!name.trim()) return;
+    onGenerate({
+      playlistName: name.trim(),
+      playlistImage: "",
+      trackCount: 20,
+      avgTempo: tempo,
+      avgEnergy: energy,
+      avgValence: valence,
+      avgAcousticness: acousticness,
+      avgDanceability: danceability,
+      avgLoudness: -8,
+    });
   };
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden px-4">
-      {/* Ambient glow orbs */}
       <div className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full bg-primary/10 blur-[120px] animate-pulse-glow" />
       <div className="absolute bottom-1/4 right-1/4 w-80 h-80 rounded-full bg-secondary/10 blur-[120px] animate-pulse-glow" style={{ animationDelay: "1s" }} />
 
@@ -34,7 +51,6 @@ const LandingScreen = ({ onGenerate }: LandingScreenProps) => {
         transition={{ duration: 0.8 }}
         className="z-10 max-w-2xl w-full text-center"
       >
-        {/* Logo / Title */}
         <motion.div
           initial={{ scale: 0.8 }}
           animate={{ scale: 1 }}
@@ -51,24 +67,62 @@ const LandingScreen = ({ onGenerate }: LandingScreenProps) => {
         </h1>
 
         <p className="text-muted-foreground text-lg md:text-xl mb-10 max-w-md mx-auto">
-          Drop a Spotify playlist. AI builds you a game inspired by the music.
+          Describe your playlist's vibe. AI builds you a game inspired by it.
         </p>
 
-        {/* Input */}
-        <form onSubmit={handleSubmit} className="flex gap-3 max-w-lg mx-auto mb-16">
-          <Input
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="Paste Spotify playlist URL..."
-            className="h-14 text-base bg-muted/50 border-border/50 placeholder:text-muted-foreground/50 focus-visible:ring-primary"
-          />
+        <form onSubmit={handleSubmit} className="max-w-lg mx-auto mb-12 space-y-6 text-left">
+          <div>
+            <label className="text-sm font-medium text-foreground mb-1 block">Playlist Name</label>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Late Night Vibes"
+              className="h-12 text-base bg-muted/50 border-border/50 placeholder:text-muted-foreground/50 focus-visible:ring-primary"
+            />
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-foreground mb-2 block">
+              Energy <span className="text-muted-foreground font-mono text-xs ml-2">{Math.round(energy * 100)}%</span>
+            </label>
+            <Slider value={[energy]} onValueChange={([v]) => setEnergy(v)} min={0} max={1} step={0.01} />
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-foreground mb-2 block">
+              Tempo <span className="text-muted-foreground font-mono text-xs ml-2">{tempo} BPM</span>
+            </label>
+            <Slider value={[tempo]} onValueChange={([v]) => setTempo(v)} min={60} max={200} step={1} />
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-foreground mb-2 block">
+              Happiness / Valence <span className="text-muted-foreground font-mono text-xs ml-2">{Math.round(valence * 100)}%</span>
+            </label>
+            <Slider value={[valence]} onValueChange={([v]) => setValence(v)} min={0} max={1} step={0.01} />
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-foreground mb-2 block">
+              Danceability <span className="text-muted-foreground font-mono text-xs ml-2">{Math.round(danceability * 100)}%</span>
+            </label>
+            <Slider value={[danceability]} onValueChange={([v]) => setDanceability(v)} min={0} max={1} step={0.01} />
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-foreground mb-2 block">
+              Acousticness <span className="text-muted-foreground font-mono text-xs ml-2">{Math.round(acousticness * 100)}%</span>
+            </label>
+            <Slider value={[acousticness]} onValueChange={([v]) => setAcousticness(v)} min={0} max={1} step={0.01} />
+          </div>
+
           <Button
             type="submit"
             size="lg"
-            className="h-14 px-8 glow-primary font-semibold text-base gap-2"
-            disabled={!url.trim()}
+            className="w-full h-14 glow-primary font-semibold text-base gap-2"
+            disabled={!name.trim()}
           >
-            Generate
+            Generate Game
             <ArrowRight className="w-4 h-4" />
           </Button>
         </form>
