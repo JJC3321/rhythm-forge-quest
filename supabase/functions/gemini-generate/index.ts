@@ -72,7 +72,7 @@ ASSET DESIGN - You MUST also design visual assets that match the music:
 - All colors should use hex format (#RRGGBB) and match the music mood
 - glowColor should be a bright/saturated version of the primaryColor`;
 
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${GEMINI_API_KEY}`;
 
     const toolDeclaration = {
       name: "create_game_config",
