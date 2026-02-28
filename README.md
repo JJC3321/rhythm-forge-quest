@@ -1,4 +1,33 @@
-# Welcome to your Lovable project
+# BeatDash
+
+Transform your Spotify playlists into AI-powered rhythm game adventures.
+
+## About
+
+BeatDash is a web application that uses AI to convert Spotify playlists into unique rhythm games. The app analyzes your playlist's musical characteristics and generates custom game mechanics, obstacles, and visual themes that match the mood and energy of your music.
+
+## Features
+
+- **Spotify Integration**: Connect any Spotify playlist to analyze tracks
+- **AI-Powered Generation**: Uses Google Gemini to create unique game configurations based on playlist metadata
+- **Dynamic Gameplay**: Game mechanics adapt to tempo, energy, danceability, and other audio features
+- **Real-time Map Generation**: Procedurally generated obstacle patterns that sync with your music
+- **Visual Themes**: AI-generated color palettes and assets that match your playlist's vibe
+
+## How it works
+
+1. **Connect**: Paste a Spotify playlist link
+2. **Analyze**: The app extracts audio features and metadata from your tracks
+3. **Generate**: Gemini AI creates game mechanics, themes, and configurations
+4. **Play**: Experience your music as an interactive rhythm game
+
+## Tech stack
+
+- **Frontend**: React, TypeScript, Tailwind CSS, Framer Motion
+- **Game Engine**: Excalibur.js for 2D game mechanics
+- **Backend**: Supabase for serverless functions
+- **AI**: Google Gemini for game generation
+- **Music API**: Spotify Web API for playlist analysis
 
 ## Project info
 

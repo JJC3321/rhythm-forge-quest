@@ -1,5 +1,5 @@
 import * as ex from "excalibur";
-import { GameConfiguration, TrackInfo, AssetDescriptions } from "@/types/game";
+import { GameConfiguration, TrackInfoWithMap, AssetDescriptions, SongMap, MapPattern, TrackInfo } from "@/types/game";
 import {
   renderPlatform,
   renderSpike,
@@ -9,6 +9,9 @@ import {
   addBackgroundParticles,
   getDefaultAssets,
 } from "@/game/assets";
+import { mapGenerator } from "./mapGenerator";
+import { preloadGDAssets } from "@/game/geometryDashAssets";
+import { getPremadeMap } from "@/game/premadeMaps";
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -128,7 +131,13 @@ export function createGame(
     callbacks.onGameOver(score);
   };
 
-  setupGeoDash(engine, config, addScore, gameOver, callbacks);
+  // Preload GD assets, then set up the game.
+  // If preloading fails the render functions fall back to procedural drawing.
+  preloadGDAssets()
+    .catch((err) => console.warn("[GD Assets] preload error (using fallbacks):", err))
+    .finally(() => {
+      setupGeoDash(engine, config, addScore, gameOver, callbacks);
+    });
 
   return engine;
 }
@@ -154,9 +163,9 @@ function setupGeoDash(
   const PLAYER_SIZE = 32;
   const PLAYER_X = 120;
 
-  // ── Track management ──
-  const tracks: TrackInfo[] =
-    config.tracks && config.tracks.length > 0 ? config.tracks : [defaultTrack()];
+  // ── Track management with map support ──
+  const tracks: TrackInfoWithMap[] =
+    config.tracks && config.tracks.length > 0 ? config.tracks : [defaultTrack() as TrackInfoWithMap];
   let currentTrackIndex = 0;
   let trackElapsedMs = 0;
   let params = trackToParams(tracks[0], config);
@@ -164,6 +173,13 @@ function setupGeoDash(
   let transitioning = false;
   let transitionProgress = 0;
   const TRANSITION_MS = 2000;
+  
+  // Map generation state
+  let currentMap: SongMap | null = null;
+  let currentPatternIndex = 0;
+  let patternProgress = 0;
+  let mapBasedSpawning = false;
+  let preloadStarted = false;
 
   function switchToTrack(index: number) {
     if (index >= tracks.length) index = 0;
@@ -173,9 +189,93 @@ function setupGeoDash(
     nextParams = trackToParams(track, config);
     transitioning = true;
     transitionProgress = 0;
+    
+    // Load map for new track (async with fallback)
+    loadTrackMapWithFallback(track);
+    
     if (callbacks.onSongChange) {
       callbacks.onSongChange(track, currentTrackIndex);
     }
+  }
+
+  function loadTrackMapWithFallback(track: TrackInfoWithMap) {
+    // Validate track data before processing
+    if (!track || !track.id || !track.name) {
+      console.error(`Failed to load track map: Invalid track data`, track);
+      mapBasedSpawning = false;
+      return;
+    }
+
+    // Try to get cached map first
+    let map = mapGenerator.getCachedMap(track.id);
+    
+    if (map) {
+      // Use cached map immediately
+      currentMap = map;
+      currentPatternIndex = 0;
+      patternProgress = 0;
+      mapBasedSpawning = true;
+      console.log(`Loaded cached map for ${track.name} with ${map.patterns.length} patterns`);
+      return;
+    }
+
+    // Load pre-made map instantly for immediate gameplay
+    const fallbackMap = getPremadeMap(track.id);
+    currentMap = fallbackMap;
+    currentPatternIndex = 0;
+    patternProgress = 0;
+    mapBasedSpawning = true;
+    console.log(`Loaded pre-made map for ${track.name} (fallback) with ${fallbackMap.patterns.length} patterns`);
+
+    // Generate real map in background and replace when ready
+    mapGenerator.generateMap(track)
+      .then(realMap => {
+        // Only replace if we're still on the same track
+        if (currentTrackIndex < tracks.length && tracks[currentTrackIndex].id === track.id) {
+          currentMap = realMap;
+          currentPatternIndex = 0;
+          patternProgress = 0;
+          mapBasedSpawning = true;
+          console.log(`Upgraded to generated map for ${track.name} with ${realMap.patterns.length} patterns`);
+        }
+      })
+      .catch(error => {
+        console.warn(`Failed to generate map for ${track.name}, keeping pre-made fallback:`, error);
+      });
+  }
+
+  function getCurrentPattern(): MapPattern | null {
+    if (!currentMap || !mapBasedSpawning) return null;
+    
+    const patterns = currentMap.patterns;
+    if (currentPatternIndex >= patterns.length) return null;
+    
+    const currentPattern = patterns[currentPatternIndex];
+    const patternEndTime = currentPattern.startTime + currentPattern.duration;
+    
+    // Check if we should move to next pattern
+    if (trackElapsedMs >= patternEndTime) {
+      currentPatternIndex++;
+      patternProgress = 0;
+      if (currentPatternIndex >= patterns.length) {
+        return null; // No more patterns
+      }
+      return getCurrentPattern(); // Recurse to get next pattern
+    }
+    
+    // Update pattern progress
+    patternProgress = (trackElapsedMs - currentPattern.startTime) / currentPattern.duration;
+    
+    return currentPattern;
+  }
+
+  function shouldSpawnFromPattern(): boolean {
+    const pattern = getCurrentPattern();
+    if (!pattern) return false;
+    
+    // Use pattern density to determine spawn probability
+    const spawnChance = pattern.density * 0.1; // Scale down to reasonable rate
+    return Math.random() < spawnChance;
   }
 
   function currentParams(): TrackParams {
@@ -199,6 +299,9 @@ function setupGeoDash(
   if (callbacks.onSongChange) {
     callbacks.onSongChange(tracks[0], 0);
   }
+
+  // Initialize first track's map
+  loadTrackMapWithFallback(tracks[0]);
 
   // ── Background visuals ──
   const bpm = config.metrics?.avgTempo || 120;
@@ -280,6 +383,15 @@ function setupGeoDash(
 
   function spawnObstacle() {
     const cp = currentParams();
+    const pattern = getCurrentPattern();
+    
+    // If we have a map pattern, use it to determine obstacle type
+    if (pattern && mapBasedSpawning) {
+      spawnObstacleFromPattern(pattern, cp);
+      return;
+    }
+    
+    // Fallback to random spawning
     const rand = Math.random();
     let totalChance = cp.spikeChance + cp.blockChance;
     let type: "spike" | "block" | "doubleSpike";
@@ -354,6 +466,135 @@ function setupGeoDash(
         });
         obs.graphics.use(gfx);
         break;
+      }
+    }
+
+    obs.on("collisionstart", (evt) => {
+      if (evt.other.owner === player && !isDead) {
+        isDead = true;
+        deathEffect();
+      }
+    });
+
+    scene.add(obs);
+    obstacles.push(obs);
+  }
+
+  function spawnObstacleFromPattern(pattern: MapPattern, cp: TrackParams) {
+    // Use pattern-specific colors if available
+    const obstacleColor = currentMap?.visualTheme.obstacleColor || cp.obstacleColor;
+    const obstacleGlow = currentMap?.visualTheme.obstacleGlow || cp.obstacleGlow;
+    
+    let obs: ex.Actor;
+
+    switch (pattern.type) {
+      case "spikes": {
+        const spikeCount = pattern.spikeCount || Math.round(3 + pattern.density * 5);
+        const spikeSize = 30 + Math.random() * 10;
+        
+        for (let i = 0; i < spikeCount; i++) {
+          const gfx = renderSpike(obstacleColor, obstacleGlow, spikeSize);
+          const spike = new ex.Actor({
+            x: W + 60 + i * pattern.spacing,
+            y: GROUND_Y - GROUND_H / 2 - spikeSize / 2,
+            width: spikeSize * 0.7,
+            height: spikeSize * 0.8,
+            collisionType: ex.CollisionType.Passive,
+          });
+          spike.graphics.use(gfx);
+          spike.on("collisionstart", (evt) => {
+            if (evt.other.owner === player && !isDead) {
+              isDead = true;
+              deathEffect();
+            }
+          });
+          scene.add(spike);
+          obstacles.push(spike);
+        }
+        return;
+      }
+      case "blocks": {
+        const blockWidth = pattern.blockWidth || 40;
+        const blockHeight = 30 + Math.random() * 20;
+        const gfx = renderBlock(obstacleColor, obstacleGlow, blockWidth, blockHeight);
+        obs = new ex.Actor({
+          x: W + 60,
+          y: GROUND_Y - GROUND_H / 2 - blockHeight / 2,
+          width: blockWidth,
+          height: blockHeight,
+          collisionType: ex.CollisionType.Passive,
+        });
+        obs.graphics.use(gfx);
+        break;
+      }
+      case "gaps": {
+        // Gaps are handled by not spawning obstacles for a duration
+        return;
+      }
+      case "collectibles": {
+        const collectCount = pattern.collectibleCount || Math.round(5 + pattern.density * 5);
+        for (let i = 0; i < collectCount; i++) {
+          const collectGfx = renderSprite(assets.collectible, 16);
+          const col = new ex.Actor({
+            x: W + 80 + i * pattern.spacing,
+            y: GROUND_Y - GROUND_H / 2 - 60 - Math.random() * 80,
+            width: 16,
+            height: 16,
+            collisionType: ex.CollisionType.Passive,
+          });
+          col.graphics.use(collectGfx);
+          col.angularVelocity = 2;
+          col.on("collisionstart", (evt) => {
+            if (evt.other.owner === player) {
+              addScore(10);
+              col.kill();
+            }
+          });
+          scene.add(col);
+          obstacles.push(col);
+        }
+        return;
+      }
+      case "mixed": {
+        // Randomly choose between spikes and blocks
+        if (Math.random() < 0.6) {
+          const spikeSize = 30 + Math.random() * 10;
+          const gfx = renderSpike(obstacleColor, obstacleGlow, spikeSize);
+          obs = new ex.Actor({
+            x: W + 60,
+            y: GROUND_Y - GROUND_H / 2 - spikeSize / 2,
+            width: spikeSize * 0.7,
+            height: spikeSize * 0.8,
+            collisionType: ex.CollisionType.Passive,
+          });
+          obs.graphics.use(gfx);
+        } else {
+          const blockWidth = 30 + Math.random() * 20;
+          const blockHeight = 30 + Math.random() * 40;
+          const gfx = renderBlock(obstacleColor, obstacleGlow, blockWidth, blockHeight);
+          obs = new ex.Actor({
+            x: W + 60,
+            y: GROUND_Y - GROUND_H / 2 - blockHeight / 2,
+            width: blockWidth,
+            height: blockHeight,
+            collisionType: ex.CollisionType.Passive,
+          });
+          obs.graphics.use(gfx);
+        }
+        break;
+      }
+      default: {
+        // Fallback to spike
+        const spikeSize = 30 + Math.random() * 10;
+        const gfx = renderSpike(obstacleColor, obstacleGlow, spikeSize);
+        obs = new ex.Actor({
+          x: W + 60,
+          y: GROUND_Y - GROUND_H / 2 - spikeSize / 2,
+          width: spikeSize * 0.7,
+          height: spikeSize * 0.8,
+          collisionType: ex.CollisionType.Passive,
+        });
+        obs.graphics.use(gfx);
       }
     }
 
@@ -443,8 +684,27 @@ function setupGeoDash(
     // ── Track timer ──
     trackElapsedMs += dt;
     const currentTrack = tracks[currentTrackIndex];
+    
+    // Start preloading next map when we're 75% through current song
+    if (!preloadStarted && trackElapsedMs >= currentTrack.durationMs * 0.75) {
+      preloadStarted = true;
+      // Preload next map in background (will use fallback if Gemini is slow)
+      const nextIndex = (currentTrackIndex + 1) % tracks.length;
+      const nextTrack = tracks[nextIndex];
+      if (nextTrack && !mapGenerator.getCachedMap(nextTrack.id)) {
+        mapGenerator.generateMap(nextTrack)
+          .then(map => {
+            console.log(`Preloaded map for next track: ${nextTrack.name}`);
+          })
+          .catch(error => {
+            console.warn(`Failed to preload map for ${nextTrack.name}:`, error);
+          });
+      }
+    }
+    
     if (trackElapsedMs >= currentTrack.durationMs) {
       switchToTrack(currentTrackIndex + 1);
+      preloadStarted = false; // Reset for next song
     }
 
     // Transition interpolation
@@ -466,6 +726,16 @@ function setupGeoDash(
       engine.input.keyboard.wasPressed(ex.Keys.Up) ||
       engine.input.keyboard.wasPressed(ex.Keys.W) ||
       pointerDown;
+
+    const skipPressed = engine.input.keyboard.wasPressed(ex.Keys.Tab) || 
+                        engine.input.keyboard.wasPressed(ex.Keys.Right);
+
+    if (skipPressed && !isDead) {
+      // Manual song skip
+      console.log(`Skipping to next song`);
+      switchToTrack(currentTrackIndex + 1);
+      preloadStarted = false; // Reset for next song
+    }
 
     if (jumpPressed && isGrounded) {
       player.vel.y = cp.jumpForce;
@@ -515,7 +785,12 @@ function setupGeoDash(
 
     // ── Spawn obstacles ──
     spawnAccumulator += dt;
-    if (spawnAccumulator >= cp.spawnInterval) {
+    
+    // Use map-based spawning if available, otherwise fall back to interval-based
+    if (mapBasedSpawning && shouldSpawnFromPattern()) {
+      spawnObstacle();
+      spawnAccumulator = 0; // Reset accumulator when we spawn from pattern
+    } else if (spawnAccumulator >= cp.spawnInterval) {
       // Enforce minimum distance so the player can actually jump between obstacles
       const jumpDuration = 2 * Math.abs(cp.jumpForce) / cp.gravity;
       const jumpDistance = cp.scrollSpeed * jumpDuration;
@@ -537,12 +812,14 @@ function setupGeoDash(
       // If too close, don't reset accumulator — retry next frame
     }
 
-    // ── Spawn collectibles ──
-    collectibleAccum += dt;
-    if (collectibleAccum >= cp.spawnInterval * 2.5) {
-      collectibleAccum -= cp.spawnInterval * 2.5;
-      if (Math.random() < 0.6) {
-        spawnCollectible();
+    // ── Spawn collectibles (only if not using map-based spawning) ──
+    if (!mapBasedSpawning) {
+      collectibleAccum += dt;
+      if (collectibleAccum >= cp.spawnInterval * 2.5) {
+        collectibleAccum -= cp.spawnInterval * 2.5;
+        if (Math.random() < 0.6) {
+          spawnCollectible();
+        }
       }
     }
 

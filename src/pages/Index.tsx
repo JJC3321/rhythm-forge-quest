@@ -1,11 +1,12 @@
 import { useState, useCallback } from "react";
-import { AppScreen, GameConfiguration, PlaylistMetrics, LoadingStep } from "@/types/game";
+import { AppScreen, GameConfiguration, PlaylistMetrics, LoadingStep, TrackInfoWithMap } from "@/types/game";
 import LandingScreen from "@/components/screens/LandingScreen";
 import LoadingScreen from "@/components/screens/LoadingScreen";
 import GameScreen from "@/components/screens/GameScreen";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { getDefaultAssets } from "@/game/assets";
+import { mapGenerator } from "@/game/mapGenerator";
 
 function extractPlaylistId(input: string): string | null {
   // Handle full Spotify URLs (including share links with ?si= params)
@@ -34,6 +35,9 @@ const Index = () => {
     setPlaylistId(id);
     setScreen("loading");
     setLoadingStep("spotify");
+    
+    // Clear any existing map cache
+    mapGenerator.clearCache();
 
     try {
       // Step 1: Analyze playlist with Spotify API
@@ -62,11 +66,38 @@ const Index = () => {
       const config = geminiData as GameConfiguration;
       config.gameType = "geodash";
       config.metrics = metrics; // Attach metrics for the engine
-      config.tracks = tracks; // Attach per-track data for GeoDash mode
+      
+      // Convert tracks to TrackInfoWithMap and attach to config
+      const tracksWithMap: TrackInfoWithMap[] = tracks
+        .filter((track: any) => track && track.id && track.name && track.artist) // Filter out invalid tracks
+        .map((track: any) => ({
+          ...track,
+          mapGenerated: false,
+          mapCacheStatus: 'pending' as const,
+        }));
+      
+      config.tracks = tracksWithMap;
       setPlaylistName(config.title || metrics.playlistName);
+      setLoadingStep("map-generation");
+
+      // Step 3: Generate map for first song
+      if (tracksWithMap.length > 0) {
+        try {
+          const firstTrack = tracksWithMap[0];
+          if (firstTrack.id && firstTrack.name && firstTrack.artist) {
+            await mapGenerator.generateMap(firstTrack);
+            console.log(`Generated initial map for ${firstTrack.name}`);
+          } else {
+            console.warn("Invalid track data for initial map generation:", firstTrack);
+          }
+        } catch (error) {
+          console.warn("Failed to generate initial map, will use fallback:", error);
+        }
+      }
+
       setLoadingStep("assets");
 
-      // Step 3: Generate game assets from AI descriptions (or defaults)
+      // Step 4: Generate game assets from AI descriptions (or defaults)
       await new Promise((r) => setTimeout(r, 400));
       if (!config.assets || !config.assets.player || !config.assets.enemies?.length) {
         config.assets = getDefaultAssets(config.colorPalette);
@@ -75,7 +106,7 @@ const Index = () => {
       setGameConfig(config);
       setLoadingStep("engine");
 
-      // Step 4: Build game world
+      // Step 5: Build game world
       await new Promise((r) => setTimeout(r, 800));
       setScreen("game");
     } catch (err: any) {

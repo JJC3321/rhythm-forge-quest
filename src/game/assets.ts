@@ -1,5 +1,6 @@
 import * as ex from "excalibur";
 import { AssetShape, SpriteDescription, PlatformDescription, BackgroundDescription, AssetDescriptions } from "@/types/game";
+import { getGDImage } from "@/game/geometryDashAssets";
 
 /** Draw a shape path on a 2D canvas context */
 function drawShape(ctx: CanvasRenderingContext2D, shape: AssetShape, cx: number, cy: number, r: number) {
@@ -152,53 +153,77 @@ export function renderPlatform(desc: PlatformDescription, width: number, height:
     cache: true,
     draw: (ctx) => {
       ctx.save();
-      const rad = Math.min(4, height / 2);
 
-      if (desc.style === "glowing") {
-        ctx.shadowColor = desc.accentColor;
-        ctx.shadowBlur = 10;
-      }
-
-      // Fill
-      if (desc.style === "gradient") {
-        const grad = ctx.createLinearGradient(0, 0, 0, height);
-        grad.addColorStop(0, desc.primaryColor);
-        grad.addColorStop(1, desc.accentColor);
-        ctx.fillStyle = grad;
-      } else {
-        ctx.fillStyle = desc.primaryColor;
-      }
-
-      // Rounded rect
-      ctx.beginPath();
-      ctx.moveTo(rad, 0);
-      ctx.lineTo(width - rad, 0);
-      ctx.quadraticCurveTo(width, 0, width, rad);
-      ctx.lineTo(width, height - rad);
-      ctx.quadraticCurveTo(width, height, width - rad, height);
-      ctx.lineTo(rad, height);
-      ctx.quadraticCurveTo(0, height, 0, height - rad);
-      ctx.lineTo(0, rad);
-      ctx.quadraticCurveTo(0, 0, rad, 0);
-      ctx.closePath();
-      ctx.fill();
-
-      // Stripes overlay
-      if (desc.style === "striped") {
-        ctx.fillStyle = desc.accentColor + "50";
-        for (let x = 0; x < width; x += 8) {
-          ctx.fillRect(x, 0, 4, height);
+      // Try to tile a real GD ground texture
+      const groundImg = getGDImage("ground_1");
+      if (groundImg) {
+        // Tile the ground image across the platform width
+        const tileW = groundImg.width;
+        const tileH = groundImg.height;
+        for (let x = 0; x < width; x += tileW) {
+          const drawW = Math.min(tileW, width - x);
+          ctx.drawImage(groundImg, 0, 0, drawW, tileH, x, 0, drawW, height);
         }
-      }
+        // Tint with theme color
+        ctx.globalCompositeOperation = "source-atop";
+        ctx.fillStyle = desc.primaryColor;
+        ctx.globalAlpha = 0.3;
+        ctx.fillRect(0, 0, width, height);
+        ctx.globalCompositeOperation = "source-over";
+        ctx.globalAlpha = 1;
+        // Top accent line
+        ctx.strokeStyle = desc.accentColor;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, 1);
+        ctx.lineTo(width, 1);
+        ctx.stroke();
+      } else {
+        // Procedural fallback
+        const rad = Math.min(4, height / 2);
 
-      // Top accent line
-      ctx.shadowBlur = 0;
-      ctx.strokeStyle = desc.accentColor;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(rad, 1);
-      ctx.lineTo(width - rad, 1);
-      ctx.stroke();
+        if (desc.style === "glowing") {
+          ctx.shadowColor = desc.accentColor;
+          ctx.shadowBlur = 10;
+        }
+
+        if (desc.style === "gradient") {
+          const grad = ctx.createLinearGradient(0, 0, 0, height);
+          grad.addColorStop(0, desc.primaryColor);
+          grad.addColorStop(1, desc.accentColor);
+          ctx.fillStyle = grad;
+        } else {
+          ctx.fillStyle = desc.primaryColor;
+        }
+
+        ctx.beginPath();
+        ctx.moveTo(rad, 0);
+        ctx.lineTo(width - rad, 0);
+        ctx.quadraticCurveTo(width, 0, width, rad);
+        ctx.lineTo(width, height - rad);
+        ctx.quadraticCurveTo(width, height, width - rad, height);
+        ctx.lineTo(rad, height);
+        ctx.quadraticCurveTo(0, height, 0, height - rad);
+        ctx.lineTo(0, rad);
+        ctx.quadraticCurveTo(0, 0, rad, 0);
+        ctx.closePath();
+        ctx.fill();
+
+        if (desc.style === "striped") {
+          ctx.fillStyle = desc.accentColor + "50";
+          for (let x = 0; x < width; x += 8) {
+            ctx.fillRect(x, 0, 4, height);
+          }
+        }
+
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = desc.accentColor;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(rad, 1);
+        ctx.lineTo(width - rad, 1);
+        ctx.stroke();
+      }
 
       ctx.restore();
     },
@@ -307,16 +332,33 @@ export function renderSpike(color: string, glowColor: string, size: number): ex.
       ctx.save();
       ctx.shadowColor = glowColor;
       ctx.shadowBlur = 8;
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.moveTo(size / 2, 2);
-      ctx.lineTo(size - 2, size - 2);
-      ctx.lineTo(2, size - 2);
-      ctx.closePath();
-      ctx.fill();
-      ctx.strokeStyle = glowColor;
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
+
+      // Try to use a real GD spike from the triggers spritesheet
+      const trigImg = getGDImage("triggers");
+      if (trigImg) {
+        // The triggers sheet is a grid — sample a spike-shaped region
+        // Tint by drawing the image then overlaying color
+        ctx.drawImage(trigImg, 0, 0, trigImg.width / 4, trigImg.height / 4, 0, 0, size, size);
+        ctx.globalCompositeOperation = "source-atop";
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 0.45;
+        ctx.fillRect(0, 0, size, size);
+        ctx.globalCompositeOperation = "source-over";
+        ctx.globalAlpha = 1;
+      } else {
+        // Procedural fallback
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(size / 2, 2);
+        ctx.lineTo(size - 2, size - 2);
+        ctx.lineTo(2, size - 2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = glowColor;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+
       ctx.restore();
     },
   });
@@ -332,25 +374,44 @@ export function renderBlock(color: string, glowColor: string, width: number, hei
       ctx.save();
       ctx.shadowColor = glowColor;
       ctx.shadowBlur = 6;
-      ctx.fillStyle = color;
-      const r = 3;
-      ctx.beginPath();
-      ctx.moveTo(r, 0);
-      ctx.lineTo(width - r, 0);
-      ctx.quadraticCurveTo(width, 0, width, r);
-      ctx.lineTo(width, height - r);
-      ctx.quadraticCurveTo(width, height, width - r, height);
-      ctx.lineTo(r, height);
-      ctx.quadraticCurveTo(0, height, 0, height - r);
-      ctx.lineTo(0, r);
-      ctx.quadraticCurveTo(0, 0, r, 0);
-      ctx.closePath();
-      ctx.fill();
-      // Inner line detail
-      ctx.strokeStyle = glowColor;
-      ctx.lineWidth = 1;
-      ctx.globalAlpha = 0.5;
-      ctx.strokeRect(4, 4, width - 8, height - 8);
+
+      // Try a real GD ground tile as the block texture
+      const groundImg = getGDImage("ground_0");
+      if (groundImg) {
+        ctx.drawImage(groundImg, 0, 0, groundImg.width, groundImg.height, 0, 0, width, height);
+        // Tint overlay
+        ctx.globalCompositeOperation = "source-atop";
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 0.35;
+        ctx.fillRect(0, 0, width, height);
+        ctx.globalCompositeOperation = "source-over";
+        ctx.globalAlpha = 0.5;
+        ctx.strokeStyle = glowColor;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(2, 2, width - 4, height - 4);
+        ctx.globalAlpha = 1;
+      } else {
+        // Procedural fallback
+        ctx.fillStyle = color;
+        const r = 3;
+        ctx.beginPath();
+        ctx.moveTo(r, 0);
+        ctx.lineTo(width - r, 0);
+        ctx.quadraticCurveTo(width, 0, width, r);
+        ctx.lineTo(width, height - r);
+        ctx.quadraticCurveTo(width, height, width - r, height);
+        ctx.lineTo(r, height);
+        ctx.quadraticCurveTo(0, height, 0, height - r);
+        ctx.lineTo(0, r);
+        ctx.quadraticCurveTo(0, 0, r, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = glowColor;
+        ctx.lineWidth = 1;
+        ctx.globalAlpha = 0.5;
+        ctx.strokeRect(4, 4, width - 8, height - 8);
+      }
+
       ctx.restore();
     },
   });
@@ -366,24 +427,41 @@ export function renderPortal(color: string, size: number): ex.Canvas {
       ctx.save();
       const cx = size / 2;
       const cy = size;
-      // Outer glow ring
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 20;
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.ellipse(cx, cy, size / 2 - 4, size - 4, 0, 0, Math.PI * 2);
-      ctx.stroke();
-      // Inner fill
-      ctx.globalAlpha = 0.15;
-      ctx.fillStyle = color;
-      ctx.fill();
-      // Core bright line
-      ctx.globalAlpha = 0.8;
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.ellipse(cx, cy, size / 3, size * 0.6, 0, 0, Math.PI * 2);
-      ctx.stroke();
+
+      // Try to use the real GD portals spritesheet
+      const portalImg = getGDImage("portals");
+      if (portalImg) {
+        // Draw a slice of the portal spritesheet scaled to fit
+        const srcSize = Math.min(portalImg.width / 4, portalImg.height / 2);
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 20;
+        ctx.drawImage(portalImg, 0, 0, srcSize, srcSize * 2, 0, 0, size, size * 2);
+        // Tint
+        ctx.globalCompositeOperation = "source-atop";
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 0.35;
+        ctx.fillRect(0, 0, size, size * 2);
+        ctx.globalCompositeOperation = "source-over";
+        ctx.globalAlpha = 1;
+      } else {
+        // Procedural fallback
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 20;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, size / 2 - 4, size - 4, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 0.15;
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.globalAlpha = 0.8;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, size / 3, size * 0.6, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
       ctx.restore();
     },
   });
@@ -402,40 +480,58 @@ export function renderGeoDashPlayer(color: string, glowColor: string, size: numb
       const cx = total / 2;
       const cy = total / 2;
       const half = size / 2;
+
       // Glow
       ctx.shadowColor = glowColor;
       ctx.shadowBlur = 12;
-      // Cube body
-      ctx.fillStyle = color;
-      ctx.fillRect(cx - half, cy - half, size, size);
-      ctx.strokeStyle = glowColor;
-      ctx.lineWidth = 2;
-      ctx.strokeRect(cx - half, cy - half, size, size);
-      // Inner square detail
-      ctx.globalAlpha = 0.3;
-      ctx.strokeRect(cx - half + 5, cy - half + 5, size - 10, size - 10);
-      ctx.globalAlpha = 1;
-      // Eyes
-      if (eyes) {
-        ctx.shadowBlur = 0;
-        ctx.shadowColor = "transparent";
-        const eyeR = size * 0.08;
-        const eyeY = cy - size * 0.05;
-        ctx.fillStyle = "#ffffff";
-        ctx.beginPath();
-        ctx.arc(cx - size * 0.15, eyeY, eyeR * 1.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.arc(cx + size * 0.15, eyeY, eyeR * 1.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = "#111111";
-        ctx.beginPath();
-        ctx.arc(cx - size * 0.15, eyeY, eyeR, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.arc(cx + size * 0.15, eyeY, eyeR, 0, Math.PI * 2);
-        ctx.fill();
+
+      // Try to draw the real GD player cube sprite
+      const cubeImg = getGDImage("playerCube");
+      if (cubeImg) {
+        ctx.drawImage(cubeImg, cx - half, cy - half, size, size);
+        // Subtle color tint so it matches the theme palette
+        ctx.globalCompositeOperation = "source-atop";
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 0.25;
+        ctx.fillRect(cx - half, cy - half, size, size);
+        ctx.globalCompositeOperation = "source-over";
+        ctx.globalAlpha = 1;
+        // Glow border
+        ctx.strokeStyle = glowColor;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(cx - half, cy - half, size, size);
+      } else {
+        // Procedural fallback
+        ctx.fillStyle = color;
+        ctx.fillRect(cx - half, cy - half, size, size);
+        ctx.strokeStyle = glowColor;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(cx - half, cy - half, size, size);
+        ctx.globalAlpha = 0.3;
+        ctx.strokeRect(cx - half + 5, cy - half + 5, size - 10, size - 10);
+        ctx.globalAlpha = 1;
+        if (eyes) {
+          ctx.shadowBlur = 0;
+          ctx.shadowColor = "transparent";
+          const eyeR = size * 0.08;
+          const eyeY = cy - size * 0.05;
+          ctx.fillStyle = "#ffffff";
+          ctx.beginPath();
+          ctx.arc(cx - size * 0.15, eyeY, eyeR * 1.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(cx + size * 0.15, eyeY, eyeR * 1.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = "#111111";
+          ctx.beginPath();
+          ctx.arc(cx - size * 0.15, eyeY, eyeR, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(cx + size * 0.15, eyeY, eyeR, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
+
       ctx.restore();
     },
   });

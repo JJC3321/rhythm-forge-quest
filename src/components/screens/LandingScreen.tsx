@@ -9,9 +9,9 @@ interface LandingScreenProps {
 }
 
 const steps = [
-  { icon: Music, label: "Paste", desc: "Share your Spotify playlist link" },
-  { icon: Sparkles, label: "AI Generate", desc: "Gemini designs a unique game" },
-  { icon: Gamepad2, label: "Play", desc: "Play with your music" },
+  { icon: Music, label: "Connect", desc: "Link your Spotify playlist" },
+  { icon: Sparkles, label: "AI Forge", desc: "Gemini crafts unique game mechanics" },
+  { icon: Gamepad2, label: "Quest", desc: "Play through your music universe" },
 ];
 
 const LandingScreen = ({ onGenerate }: LandingScreenProps) => {
@@ -43,13 +43,13 @@ const LandingScreen = ({ onGenerate }: LandingScreenProps) => {
         </motion.div>
 
         <h1 className="text-5xl md:text-7xl font-bold mb-4 tracking-tight">
-          <span className="text-gradient">Playlist</span>
+          <span className="text-gradient">Beat</span>
           <br />
-          <span className="text-foreground">to Game</span>
+          <span className="text-foreground">Dash</span>
         </h1>
 
         <p className="text-muted-foreground text-lg md:text-xl mb-10 max-w-md mx-auto">
-          Paste a Spotify playlist link. AI builds a game and plays your music.
+          Transform your Spotify playlist into an AI-powered rhythm game adventure
         </p>
 
         <form onSubmit={handleSubmit} className="flex gap-3 max-w-lg mx-auto mb-16">
@@ -65,7 +65,7 @@ const LandingScreen = ({ onGenerate }: LandingScreenProps) => {
             className="h-14 px-8 glow-primary font-semibold text-base gap-2"
             disabled={!url.trim()}
           >
-            Generate
+            Start Quest
             <ArrowRight className="w-4 h-4" />
           </Button>
         </form>

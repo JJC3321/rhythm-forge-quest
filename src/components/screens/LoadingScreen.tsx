@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Sparkles, Gamepad2, Check, Loader2, Music, Palette } from "lucide-react";
+import { Sparkles, Gamepad2, Check, Loader2, Music, Palette, Map } from "lucide-react";
 import { LoadingStep } from "@/types/game";
 
 interface LoadingScreenProps {
@@ -10,11 +10,12 @@ interface LoadingScreenProps {
 const allSteps: { key: LoadingStep; label: string; icon: typeof Sparkles }[] = [
   { key: "spotify", label: "Analyzing your music...", icon: Music },
   { key: "gemini", label: "AI is designing your game...", icon: Sparkles },
+  { key: "map-generation", label: "Creating song-specific maps...", icon: Map },
   { key: "assets", label: "Generating game assets...", icon: Palette },
   { key: "engine", label: "Building your world...", icon: Gamepad2 },
 ];
 
-const stepOrder: LoadingStep[] = ["spotify", "gemini", "assets", "engine"];
+const stepOrder: LoadingStep[] = ["spotify", "gemini", "map-generation", "assets", "engine"];
 
 const LoadingScreen = ({ step, playlistName }: LoadingScreenProps) => {
   const currentIndex = stepOrder.indexOf(step);
