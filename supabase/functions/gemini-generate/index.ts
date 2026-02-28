@@ -15,10 +15,10 @@ serve(async (req) => {
     const { metrics } = await req.json();
     if (!metrics) throw new Error("Missing playlist metrics");
 
-    const apiKey = Deno.env.get("GEMINI_API_KEY");
-    if (!apiKey) throw new Error("Gemini API key not configured");
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    const prompt = `You are a game designer AI. Based on the following Spotify playlist analysis, design a game configuration.
+    const prompt = `You are a game designer AI. Based on the following playlist analysis, design a game configuration.
 
 Playlist: "${metrics.playlistName}"
 - Average Tempo: ${metrics.avgTempo} BPM
@@ -26,70 +26,95 @@ Playlist: "${metrics.playlistName}"
 - Valence: ${metrics.avgValence} (0-1, higher = more positive/happy)
 - Acousticness: ${metrics.avgAcousticness} (0-1, higher = more acoustic)
 - Danceability: ${metrics.avgDanceability} (0-1, higher = more danceable)
-- Loudness: ${metrics.avgLoudness} dB
 - Track Count: ${metrics.trackCount}
 
-Choose a game type and configure it:
+Choose a game type:
 - "platformer" for energetic/upbeat music (energy > 0.6, valence > 0.5)
-- "dodge" for intense/high-energy music (energy > 0.7, valence < 0.5)  
+- "dodge" for intense/high-energy music (energy > 0.7, valence < 0.5)
 - "collector" for calm/acoustic music (acousticness > 0.5, energy < 0.5)
 - "runner" for rhythmic/danceable music (danceability > 0.6)
 
-Return ONLY valid JSON matching this exact schema:
-{
-  "gameType": "platformer" | "dodge" | "collector" | "runner",
-  "title": "creative game title based on playlist mood (max 30 chars)",
-  "description": "one-sentence game description",
-  "gravity": number between 0.5-2.0,
-  "playerSpeed": number between 100-400,
-  "spawnRateMs": number between 500-3000 (lower = harder),
-  "difficulty": number 1-10,
-  "colorPalette": {
-    "background": "#hex color for background (dark)",
-    "player": "#hex color for player",
-    "enemies": "#hex color for enemies/obstacles",
-    "collectibles": "#hex color for collectibles",
-    "platforms": "#hex color for platforms",
-    "accent": "#hex color for UI accents"
-  },
-  "enemyTypes": ["type1", "type2"],
-  "backgroundTheme": "description of visual theme",
-  "musicInfluence": "1-2 sentences explaining how the music influenced the game design"
-}
+Configure gravity (0.5-2.0), playerSpeed (100-400), spawnRateMs (500-3000, lower=harder), difficulty (1-10).
+Use a dark background color. Make the color palette cohesive and mood-matching. Be creative with the title (max 30 chars).`;
 
-Make the color palette feel cohesive and match the mood. Dark backgrounds only. Be creative with the title.`;
-
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            responseMimeType: "application/json",
-            temperature: 0.8,
+    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-3-flash-preview",
+        messages: [
+          { role: "system", content: "You are a creative game designer. Always use the provided tool to return structured game configurations." },
+          { role: "user", content: prompt },
+        ],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "create_game_config",
+              description: "Create a game configuration based on playlist mood analysis",
+              parameters: {
+                type: "object",
+                properties: {
+                  gameType: { type: "string", enum: ["platformer", "dodge", "collector", "runner"] },
+                  title: { type: "string" },
+                  description: { type: "string" },
+                  gravity: { type: "number" },
+                  playerSpeed: { type: "number" },
+                  spawnRateMs: { type: "number" },
+                  difficulty: { type: "number" },
+                  colorPalette: {
+                    type: "object",
+                    properties: {
+                      background: { type: "string" },
+                      player: { type: "string" },
+                      enemies: { type: "string" },
+                      collectibles: { type: "string" },
+                      platforms: { type: "string" },
+                      accent: { type: "string" },
+                    },
+                    required: ["background", "player", "enemies", "collectibles", "platforms", "accent"],
+                    additionalProperties: false,
+                  },
+                  enemyTypes: { type: "array", items: { type: "string" } },
+                  backgroundTheme: { type: "string" },
+                  musicInfluence: { type: "string" },
+                },
+                required: ["gameType", "title", "description", "gravity", "playerSpeed", "spawnRateMs", "difficulty", "colorPalette", "enemyTypes", "backgroundTheme", "musicInfluence"],
+                additionalProperties: false,
+              },
+            },
           },
-        }),
-      }
-    );
+        ],
+        tool_choice: { type: "function", function: { name: "create_game_config" } },
+      }),
+    });
 
     if (!res.ok) {
+      if (res.status === 429) {
+        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }), {
+          status: 429,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (res.status === 402) {
+        return new Response(JSON.stringify({ error: "AI credits exhausted. Please add credits to continue." }), {
+          status: 402,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
       const errText = await res.text();
-      throw new Error(`Gemini API error: ${errText}`);
+      console.error("AI gateway error:", res.status, errText);
+      throw new Error(`AI error: ${res.status}`);
     }
 
     const data = await res.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) throw new Error("No response from Gemini");
+    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+    if (!toolCall) throw new Error("No tool call response from AI");
 
-    const gameConfig = JSON.parse(text);
-
-    // Validate required fields
-    const required = ["gameType", "title", "gravity", "playerSpeed", "spawnRateMs", "colorPalette"];
-    for (const field of required) {
-      if (!(field in gameConfig)) throw new Error(`Missing field: ${field}`);
-    }
+    const gameConfig = JSON.parse(toolCall.function.arguments);
 
     // Clamp values
     gameConfig.gravity = Math.max(0.5, Math.min(2.0, gameConfig.gravity));
@@ -101,6 +126,7 @@ Make the color palette feel cohesive and match the mood. Dark backgrounds only. 
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error: any) {
+    console.error("gemini-generate error:", error);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
