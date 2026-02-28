@@ -1,19 +1,20 @@
 import { motion } from "framer-motion";
-import { Music, Sparkles, Gamepad2, Check, Loader2 } from "lucide-react";
-import { LoadingStep, PlaylistMetrics } from "@/types/game";
+import { Sparkles, Gamepad2, Check, Loader2 } from "lucide-react";
+import { PlaylistMetrics } from "@/types/game";
+
+type LoadingStep = "gemini" | "engine";
 
 interface LoadingScreenProps {
   step: LoadingStep;
   metrics: PlaylistMetrics | null;
 }
 
-const allSteps: { key: LoadingStep; label: string; icon: typeof Music }[] = [
-  { key: "spotify", label: "Analyzing your playlist...", icon: Music },
+const allSteps: { key: LoadingStep; label: string; icon: typeof Sparkles }[] = [
   { key: "gemini", label: "AI is designing your game...", icon: Sparkles },
   { key: "engine", label: "Building your world...", icon: Gamepad2 },
 ];
 
-const stepOrder: LoadingStep[] = ["spotify", "gemini", "engine"];
+const stepOrder: LoadingStep[] = ["gemini", "engine"];
 
 const LoadingScreen = ({ step, metrics }: LoadingScreenProps) => {
   const currentIndex = stepOrder.indexOf(step);
@@ -27,28 +28,19 @@ const LoadingScreen = ({ step, metrics }: LoadingScreenProps) => {
         animate={{ opacity: 1, scale: 1 }}
         className="z-10 max-w-md w-full"
       >
-        {/* Playlist info */}
         {metrics && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             className="glass rounded-xl p-4 mb-8 flex items-center gap-4"
           >
-            {metrics.playlistImage && (
-              <img
-                src={metrics.playlistImage}
-                alt={metrics.playlistName}
-                className="w-16 h-16 rounded-lg object-cover"
-              />
-            )}
             <div>
               <h3 className="font-semibold text-foreground">{metrics.playlistName}</h3>
-              <p className="text-sm text-muted-foreground">{metrics.trackCount} tracks</p>
+              <p className="text-sm text-muted-foreground">Energy {Math.round(metrics.avgEnergy * 100)}% · {metrics.avgTempo} BPM</p>
             </div>
           </motion.div>
         )}
 
-        {/* Steps */}
         <div className="space-y-4">
           {allSteps.map((s, i) => {
             const isComplete = i < currentIndex;
