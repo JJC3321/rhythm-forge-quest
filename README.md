@@ -2,6 +2,10 @@
 
 Turn a Spotify playlist into a Geometry Dash-inspired auto-runner with AI-generated gameplay tuning, theming, and per-track map patterns.
 
+## Try it out
+
+Live demo: [BeatDash](https://beatos.tech/)
+
 ## What the app does
 
 1. Accepts a Spotify playlist URL or playlist ID
