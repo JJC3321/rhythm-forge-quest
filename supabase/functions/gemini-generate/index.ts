@@ -12,27 +12,21 @@ serve(async (req) => {
   }
 
   try {
-    const { metrics } = await req.json();
-    if (!metrics) throw new Error("Missing playlist metrics");
+    const { playlistName } = await req.json();
+    if (!playlistName) throw new Error("Missing playlist name");
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    const prompt = `You are a game designer AI. Based on the following playlist analysis, design a game configuration.
+    const prompt = `You are a game designer AI. Based on the playlist name below, imagine what kind of music it contains and design a game that matches the vibe.
 
-Playlist: "${metrics.playlistName}"
-- Average Tempo: ${metrics.avgTempo} BPM
-- Energy: ${metrics.avgEnergy} (0-1, higher = more energetic)
-- Valence: ${metrics.avgValence} (0-1, higher = more positive/happy)
-- Acousticness: ${metrics.avgAcousticness} (0-1, higher = more acoustic)
-- Danceability: ${metrics.avgDanceability} (0-1, higher = more danceable)
-- Track Count: ${metrics.trackCount}
+Playlist: "${playlistName}"
 
-Choose a game type:
-- "platformer" for energetic/upbeat music (energy > 0.6, valence > 0.5)
-- "dodge" for intense/high-energy music (energy > 0.7, valence < 0.5)
-- "collector" for calm/acoustic music (acousticness > 0.5, energy < 0.5)
-- "runner" for rhythmic/danceable music (danceability > 0.6)
+Infer the mood, energy, tempo, and style from the playlist name. Then choose a game type:
+- "platformer" for energetic/upbeat vibes
+- "dodge" for intense/aggressive/dark vibes
+- "collector" for calm/chill/acoustic vibes
+- "runner" for rhythmic/danceable/groovy vibes
 
 Configure gravity (0.5-2.0), playerSpeed (100-400), spawnRateMs (500-3000, lower=harder), difficulty (1-10).
 Use a dark background color. Make the color palette cohesive and mood-matching. Be creative with the title (max 30 chars).`;

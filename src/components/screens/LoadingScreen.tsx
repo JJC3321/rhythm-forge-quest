@@ -1,12 +1,11 @@
 import { motion } from "framer-motion";
 import { Sparkles, Gamepad2, Check, Loader2 } from "lucide-react";
-import { PlaylistMetrics } from "@/types/game";
 
 type LoadingStep = "gemini" | "engine";
 
 interface LoadingScreenProps {
   step: LoadingStep;
-  metrics: PlaylistMetrics | null;
+  playlistName: string;
 }
 
 const allSteps: { key: LoadingStep; label: string; icon: typeof Sparkles }[] = [
@@ -16,7 +15,7 @@ const allSteps: { key: LoadingStep; label: string; icon: typeof Sparkles }[] = [
 
 const stepOrder: LoadingStep[] = ["gemini", "engine"];
 
-const LoadingScreen = ({ step, metrics }: LoadingScreenProps) => {
+const LoadingScreen = ({ step, playlistName }: LoadingScreenProps) => {
   const currentIndex = stepOrder.indexOf(step);
 
   return (
@@ -28,18 +27,13 @@ const LoadingScreen = ({ step, metrics }: LoadingScreenProps) => {
         animate={{ opacity: 1, scale: 1 }}
         className="z-10 max-w-md w-full"
       >
-        {metrics && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="glass rounded-xl p-4 mb-8 flex items-center gap-4"
-          >
-            <div>
-              <h3 className="font-semibold text-foreground">{metrics.playlistName}</h3>
-              <p className="text-sm text-muted-foreground">Energy {Math.round(metrics.avgEnergy * 100)}% · {metrics.avgTempo} BPM</p>
-            </div>
-          </motion.div>
-        )}
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="glass rounded-xl p-4 mb-8 text-center"
+        >
+          <h3 className="font-semibold text-foreground text-lg">{playlistName}</h3>
+        </motion.div>
 
         <div className="space-y-4">
           {allSteps.map((s, i) => {

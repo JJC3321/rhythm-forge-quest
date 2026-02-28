@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { AppScreen, PlaylistMetrics, GameConfiguration } from "@/types/game";
+import { AppScreen, GameConfiguration } from "@/types/game";
 import LandingScreen from "@/components/screens/LandingScreen";
 import LoadingScreen from "@/components/screens/LoadingScreen";
 import GameScreen from "@/components/screens/GameScreen";
@@ -8,20 +8,19 @@ import { toast } from "sonner";
 
 const Index = () => {
   const [screen, setScreen] = useState<AppScreen>("landing");
-  const [playlistMetrics, setPlaylistMetrics] = useState<PlaylistMetrics | null>(null);
+  const [playlistName, setPlaylistName] = useState("");
   const [gameConfig, setGameConfig] = useState<GameConfiguration | null>(null);
   const [score, setScore] = useState(0);
   const [loadingStep, setLoadingStep] = useState<"gemini" | "engine">("gemini");
 
-  const handleGenerate = useCallback(async (metrics: PlaylistMetrics) => {
-    setPlaylistMetrics(metrics);
+  const handleGenerate = useCallback(async (name: string) => {
+    setPlaylistName(name);
     setScreen("loading");
     setLoadingStep("gemini");
 
     try {
-      // Step 1: Generate game config with AI
       const { data: geminiData, error: geminiError } = await supabase.functions.invoke("gemini-generate", {
-        body: { metrics },
+        body: { playlistName: name },
       });
 
       if (geminiError || !geminiData) {
@@ -31,9 +30,7 @@ const Index = () => {
       setGameConfig(geminiData as GameConfiguration);
       setLoadingStep("engine");
 
-      // Step 2: Brief pause for engine setup visual
       await new Promise((r) => setTimeout(r, 1200));
-
       setScreen("game");
     } catch (err: any) {
       console.error("Generation error:", err);
@@ -44,20 +41,20 @@ const Index = () => {
 
   const handleRestart = useCallback(() => {
     setScreen("landing");
-    setPlaylistMetrics(null);
+    setPlaylistName("");
     setGameConfig(null);
     setScore(0);
   }, []);
 
   if (screen === "loading") {
-    return <LoadingScreen step={loadingStep} metrics={playlistMetrics} />;
+    return <LoadingScreen step={loadingStep} playlistName={playlistName} />;
   }
 
   if (screen === "game" && gameConfig) {
     return (
       <GameScreen
         config={gameConfig}
-        metrics={playlistMetrics!}
+        playlistName={playlistName}
         score={score}
         onScoreChange={setScore}
         onRestart={handleRestart}

@@ -2,19 +2,19 @@ import { useRef, useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Pause, Play, RotateCcw, Home, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { GameConfiguration, PlaylistMetrics } from "@/types/game";
+import { GameConfiguration } from "@/types/game";
 import { createGame } from "@/game/engine";
 import * as ex from "excalibur";
 
 interface GameScreenProps {
   config: GameConfiguration;
-  metrics: PlaylistMetrics;
+  playlistName: string;
   score: number;
   onScoreChange: (score: number) => void;
   onRestart: () => void;
 }
 
-const GameScreen = ({ config, metrics, score, onScoreChange, onRestart }: GameScreenProps) => {
+const GameScreen = ({ config, playlistName, score, onScoreChange, onRestart }: GameScreenProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<ex.Engine | null>(null);
   const [isPaused, setIsPaused] = useState(false);
@@ -62,11 +62,8 @@ const GameScreen = ({ config, metrics, score, onScoreChange, onRestart }: GameSc
       <div className="absolute top-0 left-0 right-0 p-4 flex items-start justify-between pointer-events-none">
         <div className="glass rounded-xl px-4 py-2 pointer-events-auto">
           <div className="flex items-center gap-3">
-            {metrics.playlistImage && (
-              <img src={metrics.playlistImage} alt="" className="w-8 h-8 rounded" />
-            )}
             <div>
-              <p className="text-xs text-muted-foreground">{metrics.playlistName}</p>
+              <p className="text-xs text-muted-foreground">{playlistName}</p>
               <p className="text-sm font-bold text-foreground">{config.title}</p>
             </div>
           </div>
