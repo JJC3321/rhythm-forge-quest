@@ -38,6 +38,49 @@ function generateFallbackMetrics(playlistId: string): Record<string, unknown> {
   }
   const seed = Math.abs(hash);
 
+  // Generate some sample tracks based on the playlist ID
+  const sampleTracks = [
+    {
+      id: "sample-1",
+      name: "Shadow Drift",
+      artist: "Unknown Artist",
+      durationMs: 180000,
+      popularity: 50,
+      explicit: false,
+      energy: 0.6,
+      tempo: 120,
+      valence: 0.5,
+      danceability: 0.5,
+      acousticness: 0.3,
+    },
+    {
+      id: "sample-2", 
+      name: "Neon Pulse",
+      artist: "Electronic Dreams",
+      durationMs: 200000,
+      popularity: 60,
+      explicit: false,
+      energy: 0.7,
+      tempo: 128,
+      valence: 0.6,
+      danceability: 0.8,
+      acousticness: 0.1,
+    },
+    {
+      id: "sample-3",
+      name: "Midnight City",
+      artist: "Synthwave Collective",
+      durationMs: 210000,
+      popularity: 55,
+      explicit: false,
+      energy: 0.5,
+      tempo: 115,
+      valence: 0.4,
+      danceability: 0.6,
+      acousticness: 0.2,
+    },
+  ];
+
   return {
     playlistName: "Spotify Playlist",
     playlistImage: "",
@@ -48,6 +91,7 @@ function generateFallbackMetrics(playlistId: string): Record<string, unknown> {
     avgAcousticness: Math.round(((seed % 60) / 100 + 0.1) * 100) / 100,
     avgDanceability: Math.round(((seed % 75) / 100 + 0.2) * 100) / 100,
     avgLoudness: Math.round((-12 + (seed % 8)) * 10) / 10,
+    tracks: sampleTracks,
   };
 }
 
@@ -111,6 +155,8 @@ serve(async (req) => {
       )].slice(0, 50) as string[];
 
       let genres: string[] = [];
+      // Build a map of artist ID -> genres for per-track estimation
+      const artistGenreMap: Record<string, string[]> = {};
       if (artistIds.length > 0) {
         try {
           // Fetch artists in batches of 50 to get genre info
@@ -120,6 +166,11 @@ serve(async (req) => {
           );
           if (artistRes.ok) {
             const artistData = await artistRes.json();
+            for (const a of (artistData.artists || [])) {
+              if (a && a.id) {
+                artistGenreMap[a.id] = a.genres || [];
+              }
+            }
             genres = (artistData.artists || []).flatMap((a: any) => a.genres || []);
             console.log(`Fetched ${genres.length} genre tags from ${artistIds.length} artists`);
           }
@@ -128,7 +179,66 @@ serve(async (req) => {
         }
       }
 
-      // Compute metrics from track metadata + genre signals
+      const clamp01 = (v: number) => Math.round(Math.max(0, Math.min(1, v)) * 100) / 100;
+
+      // Helper: estimate per-track metrics from metadata + artist genres
+      function estimateTrackMetrics(t: any) {
+        const trackArtistIds = (t.artists || []).map((a: any) => a.id).filter(Boolean);
+        const trackGenres = trackArtistIds.flatMap((id: string) => artistGenreMap[id] || []);
+        const gStr = trackGenres.join(" ").toLowerCase();
+        const isElec = /edm|electro|house|techno|trance|dubstep|drum and bass|dnb/.test(gStr);
+        const isAcou = /acoustic|folk|singer-songwriter|indie folk|country/.test(gStr);
+        const isHip = /hip hop|rap|trap/.test(gStr);
+        const isRk = /rock|metal|punk|grunge|alternative/.test(gStr);
+        const isPp = /pop|dance pop|synth-pop/.test(gStr);
+        const isCl = /classical|orchestra|piano|ambient|new age/.test(gStr);
+        const isLt = /latin|reggaeton|salsa|bachata|cumbia/.test(gStr);
+
+        const dur = t.duration_ms || 200000;
+        const pop = t.popularity || 50;
+        const expl = t.explicit ? 1 : 0;
+
+        let tempo = 80 + (300000 - Math.min(dur, 300000)) / 300000 * 80;
+        if (isElec) tempo += 15;
+        if (isHip) tempo = Math.max(tempo, 90);
+        if (isLt) tempo += 10;
+        if (isCl) tempo -= 20;
+
+        let energy = pop / 100 * 0.6 + 0.2;
+        if (isElec || isRk) energy += 0.15;
+        if (expl) energy += 0.05;
+        if (isCl || isAcou) energy -= 0.15;
+
+        let valence = pop / 100 * 0.5 + 0.25;
+        if (isPp || isLt) valence += 0.1;
+        if (isRk && expl) valence -= 0.1;
+
+        let acousticness = isAcou ? 0.7 : isElec ? 0.1 : (1 - pop / 100) * 0.4 + 0.1;
+        if (isCl) acousticness = Math.max(acousticness, 0.6);
+
+        let danceability = pop / 100 * 0.5 + 0.25;
+        if (isElec || isLt || isHip) danceability += 0.15;
+        if (isCl || isAcou) danceability -= 0.15;
+
+        return {
+          id: t.id || "",
+          name: t.name || "Unknown",
+          artist: (t.artists || []).map((a: any) => a.name).join(", ") || "Unknown",
+          durationMs: dur,
+          popularity: pop,
+          explicit: !!t.explicit,
+          tempo: Math.round(Math.max(60, Math.min(200, tempo))),
+          energy: clamp01(energy),
+          valence: clamp01(valence),
+          acousticness: clamp01(acousticness),
+          danceability: clamp01(danceability),
+        };
+      }
+
+      // Build per-track info array
+      const trackInfos = tracks.map(estimateTrackMetrics);
+
+      // Compute playlist-level averages from per-track data
       const avgPop = tracks.reduce((s: number, t: any) => s + (t.popularity || 50), 0) / tracks.length;
       const avgDur = tracks.reduce((s: number, t: any) => s + (t.duration_ms || 200000), 0) / tracks.length;
       const explicitRatio = tracks.filter((t: any) => t.explicit).length / tracks.length;
@@ -143,40 +253,31 @@ serve(async (req) => {
       const isClassical = /classical|orchestra|piano|ambient|new age/.test(genreStr);
       const isLatin = /latin|reggaeton|salsa|bachata|cumbia/.test(genreStr);
 
-      // Tempo estimation: shorter songs tend to be faster; genre adjustments
       let tempoEst = 80 + (300000 - Math.min(avgDur, 300000)) / 300000 * 80;
       if (isElectronic) tempoEst += 15;
       if (isHiphop) tempoEst = Math.max(tempoEst, 90);
       if (isLatin) tempoEst += 10;
       if (isClassical) tempoEst -= 20;
 
-      // Energy: popularity + explicit content + genre signals
       let energyEst = avgPop / 100 * 0.6 + 0.2;
       if (isElectronic || isRock) energyEst += 0.15;
       if (explicitRatio > 0.5) energyEst += 0.1;
       if (isClassical || isAcoustic) energyEst -= 0.15;
 
-      // Valence (happiness): popularity + genre
       let valenceEst = avgPop / 100 * 0.5 + 0.25;
       if (isPop || isLatin) valenceEst += 0.1;
       if (isRock && explicitRatio > 0.3) valenceEst -= 0.1;
 
-      // Acousticness: inverse of electronic signals
       let acousticnessEst = isAcoustic ? 0.7 : isElectronic ? 0.1 : (1 - avgPop / 100) * 0.4 + 0.1;
       if (isClassical) acousticnessEst = Math.max(acousticnessEst, 0.6);
 
-      // Danceability: genre + popularity
       let danceabilityEst = avgPop / 100 * 0.5 + 0.25;
       if (isElectronic || isLatin || isHiphop) danceabilityEst += 0.15;
       if (isClassical || isAcoustic) danceabilityEst -= 0.15;
 
-      // Loudness: energy-correlated
       const loudnessEst = -12 + energyEst * 8;
 
-      // Clamp all values to valid ranges
-      const clamp01 = (v: number) => Math.round(Math.max(0, Math.min(1, v)) * 100) / 100;
-
-      console.log("Using track metadata + genre estimation");
+      console.log(`Using track metadata + genre estimation (${trackInfos.length} tracks)`);
       return new Response(JSON.stringify({
         playlistName,
         playlistImage,
@@ -187,6 +288,7 @@ serve(async (req) => {
         avgAcousticness: clamp01(acousticnessEst),
         avgDanceability: clamp01(danceabilityEst),
         avgLoudness: Math.round(loudnessEst * 10) / 10,
+        tracks: trackInfos,
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

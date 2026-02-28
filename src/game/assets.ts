@@ -297,6 +297,150 @@ export function addBackgroundParticles(
   }
 }
 
+/** Render a triangular spike obstacle for GeoDash mode */
+export function renderSpike(color: string, glowColor: string, size: number): ex.Canvas {
+  return new ex.Canvas({
+    width: size,
+    height: size,
+    cache: true,
+    draw: (ctx) => {
+      ctx.save();
+      ctx.shadowColor = glowColor;
+      ctx.shadowBlur = 8;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(size / 2, 2);
+      ctx.lineTo(size - 2, size - 2);
+      ctx.lineTo(2, size - 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = glowColor;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.restore();
+    },
+  });
+}
+
+/** Render a block obstacle for GeoDash mode */
+export function renderBlock(color: string, glowColor: string, width: number, height: number): ex.Canvas {
+  return new ex.Canvas({
+    width,
+    height,
+    cache: true,
+    draw: (ctx) => {
+      ctx.save();
+      ctx.shadowColor = glowColor;
+      ctx.shadowBlur = 6;
+      ctx.fillStyle = color;
+      const r = 3;
+      ctx.beginPath();
+      ctx.moveTo(r, 0);
+      ctx.lineTo(width - r, 0);
+      ctx.quadraticCurveTo(width, 0, width, r);
+      ctx.lineTo(width, height - r);
+      ctx.quadraticCurveTo(width, height, width - r, height);
+      ctx.lineTo(r, height);
+      ctx.quadraticCurveTo(0, height, 0, height - r);
+      ctx.lineTo(0, r);
+      ctx.quadraticCurveTo(0, 0, r, 0);
+      ctx.closePath();
+      ctx.fill();
+      // Inner line detail
+      ctx.strokeStyle = glowColor;
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = 0.5;
+      ctx.strokeRect(4, 4, width - 8, height - 8);
+      ctx.restore();
+    },
+  });
+}
+
+/** Render a portal/transition effect for GeoDash song changes */
+export function renderPortal(color: string, size: number): ex.Canvas {
+  return new ex.Canvas({
+    width: size,
+    height: size * 2,
+    cache: false,
+    draw: (ctx) => {
+      ctx.save();
+      const cx = size / 2;
+      const cy = size;
+      // Outer glow ring
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 20;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, size / 2 - 4, size - 4, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      // Inner fill
+      ctx.globalAlpha = 0.15;
+      ctx.fillStyle = color;
+      ctx.fill();
+      // Core bright line
+      ctx.globalAlpha = 0.8;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, size / 3, size * 0.6, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    },
+  });
+}
+
+/** Render the GeoDash player cube */
+export function renderGeoDashPlayer(color: string, glowColor: string, size: number, eyes: boolean): ex.Canvas {
+  const pad = 8;
+  const total = size + pad * 2;
+  return new ex.Canvas({
+    width: total,
+    height: total,
+    cache: true,
+    draw: (ctx) => {
+      ctx.save();
+      const cx = total / 2;
+      const cy = total / 2;
+      const half = size / 2;
+      // Glow
+      ctx.shadowColor = glowColor;
+      ctx.shadowBlur = 12;
+      // Cube body
+      ctx.fillStyle = color;
+      ctx.fillRect(cx - half, cy - half, size, size);
+      ctx.strokeStyle = glowColor;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(cx - half, cy - half, size, size);
+      // Inner square detail
+      ctx.globalAlpha = 0.3;
+      ctx.strokeRect(cx - half + 5, cy - half + 5, size - 10, size - 10);
+      ctx.globalAlpha = 1;
+      // Eyes
+      if (eyes) {
+        ctx.shadowBlur = 0;
+        ctx.shadowColor = "transparent";
+        const eyeR = size * 0.08;
+        const eyeY = cy - size * 0.05;
+        ctx.fillStyle = "#ffffff";
+        ctx.beginPath();
+        ctx.arc(cx - size * 0.15, eyeY, eyeR * 1.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(cx + size * 0.15, eyeY, eyeR * 1.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#111111";
+        ctx.beginPath();
+        ctx.arc(cx - size * 0.15, eyeY, eyeR, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(cx + size * 0.15, eyeY, eyeR, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    },
+  });
+}
+
 /** Generate default asset descriptions from colorPalette when AI doesn't provide them */
 export function getDefaultAssets(colorPalette: {
   background: string;

@@ -10,7 +10,21 @@ export interface PlaylistMetrics {
   avgLoudness: number;
 }
 
-export type GameType = "platformer" | "dodge" | "collector" | "runner";
+export interface TrackInfo {
+  id: string;
+  name: string;
+  artist: string;
+  durationMs: number;
+  popularity: number;
+  explicit: boolean;
+  energy: number;
+  tempo: number;
+  valence: number;
+  danceability: number;
+  acousticness: number;
+}
+
+export type GameType = "platformer" | "dodge" | "collector" | "runner" | "geodash";
 
 export type AssetShape = "circle" | "diamond" | "triangle" | "star" | "hexagon" | "crescent" | "bolt";
 
@@ -66,6 +80,7 @@ export interface GameConfiguration {
   musicInfluence: string; // AI's reasoning
   metrics?: PlaylistMetrics; // Real Spotify audio features
   assets?: AssetDescriptions; // AI-generated visual asset descriptions
+  tracks?: TrackInfo[]; // Per-track data for GeoDash mode
 }
 
 export type AppScreen = "landing" | "loading" | "game";

@@ -31,41 +31,32 @@ REAL SPOTIFY AUDIO ANALYSIS:
 - Loudness: ${metrics.avgLoudness} dB
 - Track count: ${metrics.trackCount}
 
-USE THESE REAL METRICS to design the game. The game MUST feel like the music:
-- High tempo (>130 BPM) → fast spawn rates (500-1000ms), high player speed
-- Low tempo (<100 BPM) → slow spawn rates (2000-3000ms), gentle movement
-- High energy (>0.7) → aggressive enemies, high difficulty (7-10), chaotic spawns
-- Low energy (<0.3) → fewer enemies, low difficulty (1-4), peaceful gameplay
-- High danceability (>0.7) → "runner" game type with rhythmic patterns
-- High acousticness (>0.6) → "collector" game type with floaty, gentle physics (low gravity 0.5-0.8)
-- Low valence (<0.3) → dark moody colors, "dodge" game type
-- High valence (>0.7) → bright vibrant colors, "platformer" or "collector"
-- Map tempo directly: spawnRateMs ≈ 60000 / tempo (one spawn per beat)
+USE THESE REAL METRICS to design the visual theme. The game MUST feel like the music:
+- High energy (>0.7) → high difficulty (7-10), neon/bold colors
+- Low energy (<0.3) → low difficulty (1-4), softer colors
+- Low valence (<0.3) → dark moody colors (deep purples, blues, reds)
+- High valence (>0.7) → bright vibrant colors (cyan, yellow, green)
 - Map energy to difficulty: difficulty ≈ energy * 10
-- Map acousticness to gravity: gravity ≈ 2.0 - (acousticness * 1.5)`;
+- Map energy to playerSpeed: playerSpeed ≈ 150 + energy * 250
+- Map tempo to gravity feel: gravity ≈ 0.8 + (tempo/200) * 1.2`;
     }
 
-    const prompt = `You are a game designer AI. Design a game that is DIRECTLY DRIVEN by this playlist's music characteristics.
+    const prompt = `You are a game designer AI. Design a GEOMETRY DASH style auto-scrolling runner game themed by this playlist's music.
 
 Playlist: "${playlistName}"
 ${metricsBlock}
 
-Game types available:
-- "platformer" for energetic/upbeat vibes
-- "dodge" for intense/aggressive/dark vibes  
-- "collector" for calm/chill/acoustic vibes
-- "runner" for rhythmic/danceable/groovy vibes
+The game type is ALWAYS "geodash" — a Geometry Dash style side-scrolling auto-runner where the player cube auto-moves right and the player taps/clicks to jump over spikes and obstacles.
 
-Configure: gravity (0.5-2.0), playerSpeed (100-400), spawnRateMs (500-3000, lower=harder), difficulty (1-10).
+Configure: gravity (0.5-2.0), playerSpeed (150-400, controls scroll speed), spawnRateMs (500-2000, obstacle spacing), difficulty (1-10).
 Use a dark background color. Make the color palette match the music's mood. Be creative with the title (max 30 chars).
-In musicInfluence, explain HOW the music metrics shaped your game design decisions.
+In musicInfluence, explain HOW the music metrics shaped your visual design decisions.
 
 ASSET DESIGN - You MUST also design visual assets that match the music:
-- Player shape: use "circle" or "hexagon" for chill music, "star" or "bolt" for energetic, "diamond" for elegant
-- Player style: "neon" for electronic, "gradient" for pop, "solid" for rock, "outlined" for acoustic
+- Player: use "diamond" shape (classic GD cube feel) or "hexagon" for variety. Style "neon" for electronic, "gradient" for pop, "solid" for rock
 - Player eyes: true for fun/happy music, false for dark/intense
-- Enemies: design 2-3 enemy types with threatening shapes ("triangle", "diamond", "crescent", "bolt")
-- Enemy style: "neon" for electronic enemies, "solid" for heavy, match glowColor to enemies palette color
+- Enemies (spikes/obstacles): design 2-3 types with "triangle" (spike), "diamond" (block), "bolt" (hazard) shapes
+- Enemy style: "neon" for electronic, "solid" for heavy, match glowColor to enemies palette color
 - Collectible: use "star" or "circle" with bright glow, "neon" or "gradient" style
 - Platform style: "glowing" for electronic, "gradient" for pop, "striped" for rock, "solid" for acoustic
 - Background: more particles (30-40) for energetic music, fewer (10-15) for calm; starfield=true for spacey/ambient
@@ -80,7 +71,7 @@ ASSET DESIGN - You MUST also design visual assets that match the music:
       parameters: {
         type: "object",
         properties: {
-          gameType: { type: "string", enum: ["platformer", "dodge", "collector", "runner"] },
+          gameType: { type: "string", enum: ["geodash"] },
           title: { type: "string" },
           description: { type: "string" },
           gravity: { type: "number" },
@@ -204,9 +195,10 @@ ASSET DESIGN - You MUST also design visual assets that match the music:
     const gameConfig = functionCall.args;
 
     // Clamp values
+    gameConfig.gameType = "geodash";
     gameConfig.gravity = Math.max(0.5, Math.min(2.0, gameConfig.gravity));
-    gameConfig.playerSpeed = Math.max(100, Math.min(400, gameConfig.playerSpeed));
-    gameConfig.spawnRateMs = Math.max(500, Math.min(3000, gameConfig.spawnRateMs));
+    gameConfig.playerSpeed = Math.max(150, Math.min(400, gameConfig.playerSpeed));
+    gameConfig.spawnRateMs = Math.max(500, Math.min(2000, gameConfig.spawnRateMs));
     gameConfig.difficulty = Math.max(1, Math.min(10, gameConfig.difficulty || 5));
 
     return new Response(JSON.stringify(gameConfig), {

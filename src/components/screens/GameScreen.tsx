@@ -2,7 +2,7 @@ import { useRef, useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Pause, Play, RotateCcw, Home, Trophy, Music } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { GameConfiguration } from "@/types/game";
+import { GameConfiguration, TrackInfo } from "@/types/game";
 import { createGame } from "@/game/engine";
 import * as ex from "excalibur";
 
@@ -21,6 +21,26 @@ const GameScreen = ({ config, playlistName, playlistId, score, onScoreChange, on
   const [isPaused, setIsPaused] = useState(false);
   const [isGameOver, setIsGameOver] = useState(false);
   const [showPlayer, setShowPlayer] = useState(true);
+  const [currentTrack, setCurrentTrack] = useState<{ name: string; artist: string; index: number } | null>(null);
+
+  // Set initial track when config changes
+  useEffect(() => {
+    if (config.tracks && config.tracks.length > 0) {
+      const firstTrack = config.tracks[0];
+      setCurrentTrack({ name: firstTrack.name, artist: firstTrack.artist, index: 0 });
+    }
+  }, [config]);
+
+  // Prevent spacebar from triggering UI buttons / scrolling while game is active
+  useEffect(() => {
+    const preventSpace = (e: KeyboardEvent) => {
+      if (e.code === "Space" && !isGameOver && !isPaused) {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener("keydown", preventSpace);
+    return () => window.removeEventListener("keydown", preventSpace);
+  }, [isGameOver, isPaused]);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -30,6 +50,9 @@ const GameScreen = ({ config, playlistName, playlistId, score, onScoreChange, on
       onGameOver: (finalScore: number) => {
         onScoreChange(finalScore);
         setIsGameOver(true);
+      },
+      onSongChange: (track: TrackInfo, index: number) => {
+        setCurrentTrack({ name: track.name, artist: track.artist, index });
       },
     });
 
@@ -52,6 +75,34 @@ const GameScreen = ({ config, playlistName, playlistId, score, onScoreChange, on
     setIsPaused(!isPaused);
   }, [isPaused]);
 
+  const restartGame = useCallback(() => {
+    if (!canvasRef.current || !engineRef.current) return;
+    
+    // Stop current engine
+    engineRef.current.stop();
+    engineRef.current = null;
+    
+    // Reset game state
+    setIsGameOver(false);
+    setIsPaused(false);
+    onScoreChange(0);
+    
+    // Create new engine instance
+    const engine = createGame(canvasRef.current, config, {
+      onScore: (s: number) => onScoreChange(s),
+      onGameOver: (finalScore: number) => {
+        onScoreChange(finalScore);
+        setIsGameOver(true);
+      },
+      onSongChange: (track: TrackInfo, index: number) => {
+        setCurrentTrack({ name: track.name, artist: track.artist, index });
+      },
+    });
+    
+    engineRef.current = engine;
+    engine.start();
+  }, [config, onScoreChange]);
+
   return (
     <div className="min-h-screen bg-background relative">
       {/* Game Canvas */}
@@ -66,7 +117,19 @@ const GameScreen = ({ config, playlistName, playlistId, score, onScoreChange, on
           <div className="flex items-center gap-3">
             <div>
               <p className="text-xs text-muted-foreground">{playlistName}</p>
-              <p className="text-sm font-bold text-foreground">{config.title}</p>
+              {currentTrack ? (
+                <>
+                  <p className="text-sm font-bold text-foreground">{currentTrack.name}</p>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <Music className="w-3 h-3 text-primary animate-pulse" />
+                    <p className="text-xs text-primary truncate max-w-[180px]">
+                      {currentTrack.artist}
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm font-bold text-foreground">{config.title}</p>
+              )}
             </div>
           </div>
         </div>
@@ -79,29 +142,38 @@ const GameScreen = ({ config, playlistName, playlistId, score, onScoreChange, on
           <Button
             variant="ghost"
             size="icon"
+            onClick={restartGame}
+            className="glass rounded-xl w-10 h-10"
+            title="Restart Game"
+          >
+            <RotateCcw className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={togglePause}
             className="glass rounded-xl w-10 h-10"
           >
             {isPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
           </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowPlayer((v) => !v)}
+            className="glass rounded-xl w-10 h-10"
+            title={showPlayer ? "Hide player" : "Show player"}
+          >
+            <Music className="w-4 h-4" />
+          </Button>
         </div>
       </div>
 
       {/* Spotify mini-player — must be visible for browser to allow autoplay */}
-      <div className="absolute bottom-4 left-4 z-10 pointer-events-auto flex items-end gap-2">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setShowPlayer((v) => !v)}
-          className="glass rounded-xl w-10 h-10"
-          title={showPlayer ? "Hide player" : "Show player"}
-        >
-          <Music className="w-4 h-4" />
-        </Button>
+      <div className="absolute top-20 right-4 z-10 pointer-events-auto">
         <div
           style={{
             width: showPlayer ? 300 : 0,
-            height: showPlayer ? 80 : 0,
+            height: showPlayer ? 152 : 0,
             opacity: showPlayer ? 1 : 0,
             overflow: 'hidden',
             transition: 'all 0.3s ease',
@@ -111,7 +183,7 @@ const GameScreen = ({ config, playlistName, playlistId, score, onScoreChange, on
           <iframe
             src={`https://open.spotify.com/embed/playlist/${playlistId}?utm_source=generator&theme=0&autoplay=1`}
             width="300"
-            height="80"
+            height="152"
             allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
             loading="eager"
             title="Spotify Playlist"
@@ -140,6 +212,9 @@ const GameScreen = ({ config, playlistName, playlistId, score, onScoreChange, on
                 <Button onClick={togglePause} className="w-full gap-2">
                   <Play className="w-4 h-4" /> Resume
                 </Button>
+                <Button variant="outline" onClick={restartGame} className="w-full gap-2">
+                  <RotateCcw className="w-4 h-4" /> Restart Game
+                </Button>
                 <Button variant="outline" onClick={onRestart} className="w-full gap-2">
                   <Home className="w-4 h-4" /> New Playlist
                 </Button>
@@ -166,8 +241,11 @@ const GameScreen = ({ config, playlistName, playlistId, score, onScoreChange, on
               <h2 className="text-3xl font-bold text-foreground mb-2">Game Over</h2>
               <p className="text-5xl font-bold text-primary font-mono mb-6">{score}</p>
               <div className="space-y-3">
-                <Button onClick={onRestart} className="w-full gap-2">
-                  <RotateCcw className="w-4 h-4" /> Try Another Playlist
+                <Button onClick={restartGame} className="w-full gap-2">
+                  <RotateCcw className="w-4 h-4" /> Play Again
+                </Button>
+                <Button variant="outline" onClick={onRestart} className="w-full gap-2">
+                  <Home className="w-4 h-4" /> Try Another Playlist
                 </Button>
               </div>
             </motion.div>

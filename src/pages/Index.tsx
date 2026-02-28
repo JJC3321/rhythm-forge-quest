@@ -46,6 +46,7 @@ const Index = () => {
       }
 
       const metrics = metricsData as PlaylistMetrics;
+      const tracks = (metricsData as any).tracks || [];
       setPlaylistName(metrics.playlistName || "My Playlist");
       setLoadingStep("gemini");
 
@@ -59,7 +60,9 @@ const Index = () => {
       }
 
       const config = geminiData as GameConfiguration;
+      config.gameType = "geodash";
       config.metrics = metrics; // Attach metrics for the engine
+      config.tracks = tracks; // Attach per-track data for GeoDash mode
       setPlaylistName(config.title || metrics.playlistName);
       setLoadingStep("assets");
 
