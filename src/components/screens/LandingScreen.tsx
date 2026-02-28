@@ -3,41 +3,23 @@ import { motion } from "framer-motion";
 import { Music, Sparkles, Gamepad2, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Slider } from "@/components/ui/slider";
-import { PlaylistMetrics } from "@/types/game";
 
 interface LandingScreenProps {
-  onGenerate: (metrics: PlaylistMetrics) => void;
+  onGenerate: (playlistName: string) => void;
 }
 
 const steps = [
-  { icon: Music, label: "Describe", desc: "Tell us about your playlist's vibe" },
+  { icon: Music, label: "Name It", desc: "Tell us your playlist name" },
   { icon: Sparkles, label: "AI Generate", desc: "Gemini designs a unique game" },
   { icon: Gamepad2, label: "Play", desc: "Jump into your custom world" },
 ];
 
 const LandingScreen = ({ onGenerate }: LandingScreenProps) => {
   const [name, setName] = useState("");
-  const [energy, setEnergy] = useState(0.5);
-  const [tempo, setTempo] = useState(120);
-  const [valence, setValence] = useState(0.5);
-  const [danceability, setDanceability] = useState(0.5);
-  const [acousticness, setAcousticness] = useState(0.3);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
-    onGenerate({
-      playlistName: name.trim(),
-      playlistImage: "",
-      trackCount: 20,
-      avgTempo: tempo,
-      avgEnergy: energy,
-      avgValence: valence,
-      avgAcousticness: acousticness,
-      avgDanceability: danceability,
-      avgLoudness: -8,
-    });
+    if (name.trim()) onGenerate(name.trim());
   };
 
   return (
@@ -67,67 +49,27 @@ const LandingScreen = ({ onGenerate }: LandingScreenProps) => {
         </h1>
 
         <p className="text-muted-foreground text-lg md:text-xl mb-10 max-w-md mx-auto">
-          Describe your playlist's vibe. AI builds you a game inspired by it.
+          Drop your playlist name. AI builds you a game inspired by the vibe.
         </p>
 
-        <form onSubmit={handleSubmit} className="max-w-lg mx-auto mb-12 space-y-6 text-left">
-          <div>
-            <label className="text-sm font-medium text-foreground mb-1 block">Playlist Name</label>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Late Night Vibes"
-              className="h-12 text-base bg-muted/50 border-border/50 placeholder:text-muted-foreground/50 focus-visible:ring-primary"
-            />
-          </div>
-
-          <div>
-            <label className="text-sm font-medium text-foreground mb-2 block">
-              Energy <span className="text-muted-foreground font-mono text-xs ml-2">{Math.round(energy * 100)}%</span>
-            </label>
-            <Slider value={[energy]} onValueChange={([v]) => setEnergy(v)} min={0} max={1} step={0.01} />
-          </div>
-
-          <div>
-            <label className="text-sm font-medium text-foreground mb-2 block">
-              Tempo <span className="text-muted-foreground font-mono text-xs ml-2">{tempo} BPM</span>
-            </label>
-            <Slider value={[tempo]} onValueChange={([v]) => setTempo(v)} min={60} max={200} step={1} />
-          </div>
-
-          <div>
-            <label className="text-sm font-medium text-foreground mb-2 block">
-              Happiness / Valence <span className="text-muted-foreground font-mono text-xs ml-2">{Math.round(valence * 100)}%</span>
-            </label>
-            <Slider value={[valence]} onValueChange={([v]) => setValence(v)} min={0} max={1} step={0.01} />
-          </div>
-
-          <div>
-            <label className="text-sm font-medium text-foreground mb-2 block">
-              Danceability <span className="text-muted-foreground font-mono text-xs ml-2">{Math.round(danceability * 100)}%</span>
-            </label>
-            <Slider value={[danceability]} onValueChange={([v]) => setDanceability(v)} min={0} max={1} step={0.01} />
-          </div>
-
-          <div>
-            <label className="text-sm font-medium text-foreground mb-2 block">
-              Acousticness <span className="text-muted-foreground font-mono text-xs ml-2">{Math.round(acousticness * 100)}%</span>
-            </label>
-            <Slider value={[acousticness]} onValueChange={([v]) => setAcousticness(v)} min={0} max={1} step={0.01} />
-          </div>
-
+        <form onSubmit={handleSubmit} className="flex gap-3 max-w-lg mx-auto mb-16">
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Late Night Vibes, Workout Bangers..."
+            className="h-14 text-base bg-muted/50 border-border/50 placeholder:text-muted-foreground/50 focus-visible:ring-primary"
+          />
           <Button
             type="submit"
             size="lg"
-            className="w-full h-14 glow-primary font-semibold text-base gap-2"
+            className="h-14 px-8 glow-primary font-semibold text-base gap-2"
             disabled={!name.trim()}
           >
-            Generate Game
+            Generate
             <ArrowRight className="w-4 h-4" />
           </Button>
         </form>
 
-        {/* How it works */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {steps.map((step, i) => (
             <motion.div
